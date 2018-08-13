@@ -12,9 +12,11 @@ import os
 import vizdoom as vzd
 from argparse import ArgumentParser
 import oblige
+import cv2
+import numpy as np
 
 DEFAULT_CONFIG = "../../scenarios/oblige.cfg"
-DEFAULT_SEED = 666
+DEFAULT_SEED = 777
 DEFAULT_OUTPUT_FILE = "test.wad"
 
 if __name__ == "__main__":
@@ -76,10 +78,38 @@ if __name__ == "__main__":
     game.set_doom_scenario_path(args.output_file)
 
     # Sets up game for spectator (you)
-    game.add_game_args("+freelook 1")
-    game.set_screen_resolution(vzd.ScreenResolution.RES_640X480)
+    #game.add_game_args("+freelook 1")
+    game.set_screen_resolution(vzd.ScreenResolution.RES_1280X960)
     game.set_window_visible(True)
     game.set_mode(vzd.Mode.SPECTATOR)
+
+    # Set cv2 friendly format.
+    game.set_screen_format(vzd.ScreenFormat.BGR24)
+
+    # Enables rendering of automap.
+    game.set_automap_buffer_enabled(True)
+
+    # All map's geometry and objects will be displayed.
+    game.set_automap_mode(vzd.AutomapMode.OBJECTS_WITH_SIZE)
+
+    game.add_available_game_variable(vzd.GameVariable.POSITION_X)
+    game.add_available_game_variable(vzd.GameVariable.POSITION_Y)
+    game.add_available_game_variable(vzd.GameVariable.POSITION_Z)
+
+    # This CVAR can be used to make a map follow a player.
+    #game.add_game_args("+am_followplayer 1")
+
+    # This CVAR controls scale of rendered map (higher valuer means bigger zoom).
+    #game.add_game_args("+viz_am_scale 10")
+
+    # This CVAR shows the whole map centered (overrides am_followplayer and viz_am_scale).
+    game.add_game_args("+viz_am_center 1")
+
+    # Map's colors can be changed using CVARs, full list is available here: https://zdoom.org/wiki/CVARs:Automap#am_backcolor
+    #game.add_game_args("+am_backcolor 000000")
+
+    game.add_game_args("+am_showthingsprites 0")
+    game.add_game_args("+am_cheat 0")
 
     game.init()
 
@@ -96,8 +126,22 @@ if __name__ == "__main__":
         game.new_episode()
 
         time = 0
+
+        # Sleep time between actions in ms
+        sleep_time = 28
+
         while not game.is_episode_finished():
             state = game.get_state()
+
+            # Shows automap buffer
+            map = state.automap_buffer
+            print(map.shape, map.dtype)
+            print(np.min(map), np.max(map))
+            if map is not None:
+                cv2.imshow('ViZDoom Automap Buffer', map)
+
+            cv2.waitKey(sleep_time)
+
             time = game.get_episode_time()
 
             game.advance_action()
