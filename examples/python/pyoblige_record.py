@@ -17,7 +17,7 @@ import cv2
 import numpy as np
 
 DEFAULT_CONFIG = "../../scenarios/oblige.cfg"
-DEFAULT_SEED = 111
+DEFAULT_SEED = 10
 DEFAULT_OUTPUT_FILE = "gen_scene_%d.wad" % (DEFAULT_SEED)
 
 if __name__ == "__main__":
@@ -60,7 +60,12 @@ if __name__ == "__main__":
         "health": "more",
         "weapons": "sooner",
         "theme": "jumble",
-        "mons": "more"})
+        "mons": "none",
+        "stealth_mons": 0,
+        "switches": "none",
+        "teleporters": "none",
+        "darkness": "none",
+        "keys": "none"})
 
     # There are few predefined sets of settings already defined in Oblige package, like test_wad and childs_play_wad
     #generator.set_config(oblige.childs_play_wad)
@@ -86,6 +91,8 @@ if __name__ == "__main__":
     game.set_window_visible(True)
     game.set_mode(vzd.Mode.SPECTATOR)
     game.set_render_hud(False)
+    game.set_render_decals(False)
+    game.set_render_messages(False)
 
     # Set cv2 friendly format.
     game.set_screen_format(vzd.ScreenFormat.BGR24)
@@ -123,7 +130,11 @@ if __name__ == "__main__":
     #game.add_game_args("+am_backcolor 000000")
 
     game.add_game_args("+am_showthingsprites 3")
-    game.add_game_args("+am_cheat 1")
+    game.add_game_args("+am_cheat 0")
+
+    game.add_game_args("+r_particles 0")
+    game.add_game_args("+r_drawtrans 0")
+    game.add_game_args("+cl_maxdecals 0")
 
     game.init()
 
@@ -138,7 +149,7 @@ if __name__ == "__main__":
         print("Map {}/{}".format(i, episodes))
         map = "map{:02}".format(i)
         game.set_doom_map(map)
-        game.new_episode()
+        game.new_episode("episode_" + str(DEFAULT_SEED) + "_" + str(i) + "_rec.lmp")
 
         episode_dict = {}
 
@@ -181,7 +192,7 @@ if __name__ == "__main__":
 
             step = step + 1
 
-        np.save("replay_saved_%d_%d.npy" %(DEFAULT_SEED, i), episode_dict)
+        #np.save("replay_saved_%d_%d.npy" %(DEFAULT_SEED, i), episode_dict)
         print("Episode finished!")
         print("Total reward:", game.get_total_reward())
         print("Kills:", game.get_game_variable(vzd.GameVariable.KILLCOUNT))

@@ -15,9 +15,10 @@ from argparse import ArgumentParser
 import oblige
 import cv2
 import numpy as np
+import math
 
 DEFAULT_CONFIG = "../../scenarios/oblige.cfg"
-DEFAULT_SEED = 111
+DEFAULT_SEED = 999
 DEFAULT_OUTPUT_FILE = "gen_scene_%d.wad" % (DEFAULT_SEED)
 
 if __name__ == "__main__":
@@ -129,6 +130,7 @@ if __name__ == "__main__":
 
     # Play as many episodes as maps in the new generated WAD file.
     episodes = num_maps
+    simple_map = np.zeros((257, 257), dtype=np.uint8)
 
 
     # Play until the game (episode) is over.
@@ -163,13 +165,54 @@ if __name__ == "__main__":
             last_action = game.get_last_action()
             reward = game.get_last_reward()
 
-            print("State #" + str(state.number))
-            print("Game variables: ", state.game_variables)
-            print("Action:", last_action)
-            print("Reward:", reward)
-            print("=====================")
+            player_x = state.game_variables[5]
+            player_y = state.game_variables[6]
+            player_z = state.game_variables[7]
 
-            #if auto_map_buffer is not None:
+            player_angle = state.game_variables[8]
+            player_pitch = state.game_variables[9]
+            player_roll = state.game_variables[10]
+
+            print('player:', player_x, player_y, player_z)
+            print('player:', player_angle, player_pitch, player_roll)
+
+            simple_map = np.zeros((257, 257), dtype=np.uint8)
+
+            for l in state.labels:
+                object_relative_x = -l.object_position_x + player_x
+                object_relative_y = -l.object_position_y + player_y
+                object_relative_z = -l.object_position_z + player_z
+
+                print(l.object_name, (object_relative_x),
+                      (object_relative_y),
+                      (object_relative_z))
+
+
+                scaled_x = int(object_relative_x/10 + 128)
+                scaled_y = int(object_relative_y/10 + 128)
+
+                print(scaled_x, scaled_y)
+
+                if (scaled_x >= 0 and scaled_x <= 256 and scaled_y >= 0 and scaled_y <= 256):
+                    simple_map[(scaled_x, scaled_y)] = 255
+
+                r = 128
+                fov = 90
+
+                x1 = int(r * math.cos(math.radians(player_angle)))
+                y1 = int(r * math.sin(math.radians(player_angle)))
+
+                x2 = int(r * math.cos(math.radians(player_angle + fov)))
+                y2 = int(r * math.sin(math.radians(player_angle + fov)))
+
+                _, p1, p2 = cv2.clipLine((0, 0, 257, 257), (128, 128), (128 + x1, 128 + y1))
+                _, p3, p4 = cv2.clipLine((0, 0, 257, 257), (128, 128), (128 + x2, 128 + y2))
+
+                cv2.line(simple_map, p1, p2, (255, 255, 255), thickness=1)
+                cv2.line(simple_map, p3, p4, (255, 255, 255), thickness=1)
+
+            if auto_map_buffer is not None:
+                cv2.imshow('ViZDoom Simplemap Buffer', simple_map)
             #    cv2.imshow('ViZDoom Automap Buffer', auto_map_buffer)
             #    cv2.imshow('ViZDoom depth Buffer', depth_buffer)
             #    cv2.imshow('ViZDoom labels Buffer', labels_buffer)
