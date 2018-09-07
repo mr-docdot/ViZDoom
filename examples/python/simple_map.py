@@ -130,8 +130,7 @@ if __name__ == "__main__":
 
     # Play as many episodes as maps in the new generated WAD file.
     episodes = num_maps
-    simple_map = np.zeros((257, 257), dtype=np.uint8)
-
+    map_size = 256
 
     # Play until the game (episode) is over.
     for i in range(1, episodes + 1):
@@ -149,6 +148,14 @@ if __name__ == "__main__":
         # Sleep time between actions in ms
         sleep_time = 10
         step = 0
+
+        fov = 90.0
+        width = 1280
+        height = 960
+        map_scale = 5
+
+        fx = width/(2 * math.tan(math.radians(fov/2)))
+        fy = height/(2 * math.tan(math.radians(fov/2)))
 
         while not game.is_episode_finished():
             state = game.get_state()
@@ -176,7 +183,48 @@ if __name__ == "__main__":
             print('player:', player_x, player_y, player_z)
             print('player:', player_angle, player_pitch, player_roll)
 
-            simple_map = np.zeros((257, 257), dtype=np.uint8)
+            canvas_size = 2*map_size + 1
+            simple_map = np.zeros((canvas_size, canvas_size, 3), dtype=np.uint8)
+
+            r = canvas_size
+            offset = 225
+
+            y1 = int(r * math.cos(math.radians(offset + player_angle)))
+            x1 = int(r * math.sin(math.radians(offset + player_angle)))
+
+            y2 = int(r * math.cos(math.radians(offset + player_angle - fov)))
+            x2 = int(r * math.sin(math.radians(offset + player_angle - fov)))
+
+            _, p1, p2 = cv2.clipLine((0, 0, canvas_size, canvas_size), (map_size, map_size),
+                                     (map_size + x1, map_size + y1))
+            _, p3, p4 = cv2.clipLine((0, 0, canvas_size, canvas_size), (map_size, map_size),
+                                     (map_size + x2, map_size + y2))
+
+            #cv2.line(simple_map, p1, p2, (255, 255, 255), thickness=1)
+            #cv2.line(simple_map, p3, p4, (255, 255, 255), thickness=1)
+
+            game_unit = 110.0/14
+            ray_cast = (depth_buffer[height/2] * game_unit)/float(map_scale)
+
+            ray_points = [ (map_size, map_size) ]
+            for i in range(canvas_size):
+                d = ray_cast[int(float(width)/canvas_size * i - 1)]
+                theta = (float(i)/canvas_size * fov)
+                #ray_y = int(d * math.sin(math.radians(offset + player_angle - theta))) + map_size
+                #ray_x = int(d * math.cos(math.radians(offset + player_angle - theta))) + map_size
+                ray_y = int(d * math.sin(math.radians(offset - theta))) + map_size
+                ray_x = int(d * math.cos(math.radians(offset - theta))) + map_size
+
+                _, _, p = cv2.clipLine((0, 0, canvas_size, canvas_size), (map_size, map_size),
+                                                                  (ray_y, ray_x))
+                ray_points.append(p)
+
+                #if (ray_x >= 0 and ray_x < canvas_size and
+                #    ray_y >= 0 and ray_y < canvas_size):
+                #    ray_points.append((ray_y, ray_x))
+                #    simple_map[(ray_x, ray_y)] = 255
+
+            cv2.fillPoly(simple_map, np.array([ray_points], dtype=np.int32), (255, 255, 255))
 
             for l in state.labels:
                 object_relative_x = -l.object_position_x + player_x
@@ -187,29 +235,18 @@ if __name__ == "__main__":
                       (object_relative_y),
                       (object_relative_z))
 
+                scaled_x = object_relative_x
+                scaled_y = object_relative_y
 
-                scaled_x = int(object_relative_x/10 + 128)
-                scaled_y = int(object_relative_y/10 + 128)
+                rotated_x = math.cos(math.radians(-player_angle)) * scaled_x - math.sin(math.radians(-player_angle)) * scaled_y
+                rotated_y = math.sin(math.radians(-player_angle)) * scaled_x + math.cos(math.radians(-player_angle)) * scaled_y
 
-                print(scaled_x, scaled_y)
+                rotated_x = int(rotated_x/map_scale + map_size)
+                rotated_y = int(rotated_y/map_scale + map_size)
 
-                if (scaled_x >= 0 and scaled_x <= 256 and scaled_y >= 0 and scaled_y <= 256):
-                    simple_map[(scaled_x, scaled_y)] = 255
-
-                r = 128
-                fov = 90
-
-                x1 = int(r * math.cos(math.radians(player_angle)))
-                y1 = int(r * math.sin(math.radians(player_angle)))
-
-                x2 = int(r * math.cos(math.radians(player_angle + fov)))
-                y2 = int(r * math.sin(math.radians(player_angle + fov)))
-
-                _, p1, p2 = cv2.clipLine((0, 0, 257, 257), (128, 128), (128 + x1, 128 + y1))
-                _, p3, p4 = cv2.clipLine((0, 0, 257, 257), (128, 128), (128 + x2, 128 + y2))
-
-                cv2.line(simple_map, p1, p2, (255, 255, 255), thickness=1)
-                cv2.line(simple_map, p3, p4, (255, 255, 255), thickness=1)
+                if (rotated_x >= 0 and rotated_x < canvas_size and
+                    rotated_y >= 0 and rotated_y < canvas_size):
+                    simple_map[(rotated_x, rotated_y)] = (0, 0, 255)
 
             if auto_map_buffer is not None:
                 cv2.imshow('ViZDoom Simplemap Buffer', simple_map)
@@ -224,7 +261,6 @@ if __name__ == "__main__":
 
             step = step + 1
 
-        np.save("replay_saved_%d_%d.npy" %(DEFAULT_SEED, i), episode_dict)
         print("Episode finished!")
         print("Total reward:", game.get_total_reward())
         print("Kills:", game.get_game_variable(vzd.GameVariable.KILLCOUNT))
@@ -237,6 +273,6 @@ if __name__ == "__main__":
     game.close()
 
     # Remove output of generator
-    #os.remove(wad_path)
-    #os.remove(wad_path.replace("wad", "old"))
-    #os.remove(wad_path.replace("wad", "txt"))
+    os.remove(wad_path)
+    os.remove(wad_path.replace("wad", "old"))
+    os.remove(wad_path.replace("wad", "txt"))
