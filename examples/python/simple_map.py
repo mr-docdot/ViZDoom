@@ -21,6 +21,92 @@ DEFAULT_CONFIG = "../../scenarios/oblige.cfg"
 DEFAULT_SEED = 999
 DEFAULT_OUTPUT_FILE = "gen_scene_%d.wad" % (DEFAULT_SEED)
 
+def visualize_free_space(state, height=960, width=1280,
+                         map_size=256, map_scale=5, fov=90.0):
+
+    depth_buffer = state.depth_buffer
+    labels_buffer = state.labels_buffer
+    screen_buffer = state.screen_buffer
+
+    player_x = state.game_variables[5]
+    player_y = state.game_variables[6]
+    player_z = state.game_variables[7]
+
+    player_angle = state.game_variables[8]
+    player_pitch = state.game_variables[9]
+    player_roll = state.game_variables[10]
+
+    print('player:', player_x, player_y, player_z)
+    print('player:', player_angle, player_pitch, player_roll)
+
+    canvas_size = 2*map_size + 1
+    simple_map = np.zeros((canvas_size, canvas_size, 3), dtype=np.uint8)
+
+    r = canvas_size
+    offset = 225
+
+    y1 = int(r * math.cos(math.radians(offset + player_angle)))
+    x1 = int(r * math.sin(math.radians(offset + player_angle)))
+
+    y2 = int(r * math.cos(math.radians(offset + player_angle - fov)))
+    x2 = int(r * math.sin(math.radians(offset + player_angle - fov)))
+
+    _, p1, p2 = cv2.clipLine((0, 0, canvas_size, canvas_size), (map_size, map_size),
+                             (map_size + x1, map_size + y1))
+    _, p3, p4 = cv2.clipLine((0, 0, canvas_size, canvas_size), (map_size, map_size),
+                             (map_size + x2, map_size + y2))
+
+    #cv2.line(simple_map, p1, p2, (255, 255, 255), thickness=1)
+    #cv2.line(simple_map, p3, p4, (255, 255, 255), thickness=1)
+
+    game_unit = 110.0/14
+    ray_cast = (depth_buffer[height/2] * game_unit)/float(map_scale)
+
+    ray_points = [ (map_size, map_size) ]
+    for i in range(canvas_size):
+        d = ray_cast[int(float(width)/canvas_size * i - 1)]
+        theta = (float(i)/canvas_size * fov)
+        #ray_y = int(d * math.sin(math.radians(offset + player_angle - theta))) + map_size
+        #ray_x = int(d * math.cos(math.radians(offset + player_angle - theta))) + map_size
+        ray_y = int(d * math.sin(math.radians(offset - theta))) + map_size
+        ray_x = int(d * math.cos(math.radians(offset - theta))) + map_size
+
+        _, _, p = cv2.clipLine((0, 0, canvas_size, canvas_size), (map_size, map_size),
+                                                          (ray_y, ray_x))
+        ray_points.append(p)
+
+        #if (ray_x >= 0 and ray_x < canvas_size and
+        #    ray_y >= 0 and ray_y < canvas_size):
+        #    ray_points.append((ray_y, ray_x))
+        #    simple_map[(ray_x, ray_y)] = 255
+
+    cv2.fillPoly(simple_map, np.array([ray_points], dtype=np.int32), (255, 255, 255))
+
+    for l in state.labels:
+        object_relative_x = -l.object_position_x + player_x
+        object_relative_y = -l.object_position_y + player_y
+        object_relative_z = -l.object_position_z + player_z
+
+        print(l.object_name, (object_relative_x),
+              (object_relative_y),
+              (object_relative_z))
+
+        scaled_x = object_relative_x
+        scaled_y = object_relative_y
+
+        rotated_x = math.cos(math.radians(-player_angle)) * scaled_x - math.sin(math.radians(-player_angle)) * scaled_y
+        rotated_y = math.sin(math.radians(-player_angle)) * scaled_x + math.cos(math.radians(-player_angle)) * scaled_y
+
+        rotated_x = int(rotated_x/map_scale + map_size)
+        rotated_y = int(rotated_y/map_scale + map_size)
+
+        if (rotated_x >= 0 and rotated_x < canvas_size and
+            rotated_y >= 0 and rotated_y < canvas_size):
+            simple_map[(rotated_x, rotated_y)] = (0, 0, 255)
+
+    cv2.imshow('ViZDoom Simplemap Buffer', simple_map)
+
+
 if __name__ == "__main__":
     parser = ArgumentParser("An example showing how to generate maps with PyOblige.")
     parser.add_argument(dest="config",
@@ -61,7 +147,12 @@ if __name__ == "__main__":
         "health": "more",
         "weapons": "sooner",
         "theme": "jumble",
-        "mons": "more"})
+        "mons": "none",
+        "stealth_mons": 0,
+        "switches": "none",
+        "teleporters": "none",
+        "darkness": "none",
+        "keys": "none"})
 
     # There are few predefined sets of settings already defined in Oblige package, like test_wad and childs_play_wad
     #generator.set_config(oblige.childs_play_wad)
@@ -130,7 +221,6 @@ if __name__ == "__main__":
 
     # Play as many episodes as maps in the new generated WAD file.
     episodes = num_maps
-    map_size = 256
 
     # Play until the game (episode) is over.
     for i in range(1, episodes + 1):
@@ -149,14 +239,6 @@ if __name__ == "__main__":
         sleep_time = 10
         step = 0
 
-        fov = 90.0
-        width = 1280
-        height = 960
-        map_scale = 5
-
-        fx = width/(2 * math.tan(math.radians(fov/2)))
-        fy = height/(2 * math.tan(math.radians(fov/2)))
-
         while not game.is_episode_finished():
             state = game.get_state()
 
@@ -172,90 +254,15 @@ if __name__ == "__main__":
             last_action = game.get_last_action()
             reward = game.get_last_reward()
 
-            player_x = state.game_variables[5]
-            player_y = state.game_variables[6]
-            player_z = state.game_variables[7]
-
-            player_angle = state.game_variables[8]
-            player_pitch = state.game_variables[9]
-            player_roll = state.game_variables[10]
-
-            print('player:', player_x, player_y, player_z)
-            print('player:', player_angle, player_pitch, player_roll)
-
-            canvas_size = 2*map_size + 1
-            simple_map = np.zeros((canvas_size, canvas_size, 3), dtype=np.uint8)
-
-            r = canvas_size
-            offset = 225
-
-            y1 = int(r * math.cos(math.radians(offset + player_angle)))
-            x1 = int(r * math.sin(math.radians(offset + player_angle)))
-
-            y2 = int(r * math.cos(math.radians(offset + player_angle - fov)))
-            x2 = int(r * math.sin(math.radians(offset + player_angle - fov)))
-
-            _, p1, p2 = cv2.clipLine((0, 0, canvas_size, canvas_size), (map_size, map_size),
-                                     (map_size + x1, map_size + y1))
-            _, p3, p4 = cv2.clipLine((0, 0, canvas_size, canvas_size), (map_size, map_size),
-                                     (map_size + x2, map_size + y2))
-
-            #cv2.line(simple_map, p1, p2, (255, 255, 255), thickness=1)
-            #cv2.line(simple_map, p3, p4, (255, 255, 255), thickness=1)
-
-            game_unit = 110.0/14
-            ray_cast = (depth_buffer[height/2] * game_unit)/float(map_scale)
-
-            ray_points = [ (map_size, map_size) ]
-            for i in range(canvas_size):
-                d = ray_cast[int(float(width)/canvas_size * i - 1)]
-                theta = (float(i)/canvas_size * fov)
-                #ray_y = int(d * math.sin(math.radians(offset + player_angle - theta))) + map_size
-                #ray_x = int(d * math.cos(math.radians(offset + player_angle - theta))) + map_size
-                ray_y = int(d * math.sin(math.radians(offset - theta))) + map_size
-                ray_x = int(d * math.cos(math.radians(offset - theta))) + map_size
-
-                _, _, p = cv2.clipLine((0, 0, canvas_size, canvas_size), (map_size, map_size),
-                                                                  (ray_y, ray_x))
-                ray_points.append(p)
-
-                #if (ray_x >= 0 and ray_x < canvas_size and
-                #    ray_y >= 0 and ray_y < canvas_size):
-                #    ray_points.append((ray_y, ray_x))
-                #    simple_map[(ray_x, ray_y)] = 255
-
-            cv2.fillPoly(simple_map, np.array([ray_points], dtype=np.int32), (255, 255, 255))
-
-            for l in state.labels:
-                object_relative_x = -l.object_position_x + player_x
-                object_relative_y = -l.object_position_y + player_y
-                object_relative_z = -l.object_position_z + player_z
-
-                print(l.object_name, (object_relative_x),
-                      (object_relative_y),
-                      (object_relative_z))
-
-                scaled_x = object_relative_x
-                scaled_y = object_relative_y
-
-                rotated_x = math.cos(math.radians(-player_angle)) * scaled_x - math.sin(math.radians(-player_angle)) * scaled_y
-                rotated_y = math.sin(math.radians(-player_angle)) * scaled_x + math.cos(math.radians(-player_angle)) * scaled_y
-
-                rotated_x = int(rotated_x/map_scale + map_size)
-                rotated_y = int(rotated_y/map_scale + map_size)
-
-                if (rotated_x >= 0 and rotated_x < canvas_size and
-                    rotated_y >= 0 and rotated_y < canvas_size):
-                    simple_map[(rotated_x, rotated_y)] = (0, 0, 255)
-
-            if auto_map_buffer is not None:
-                cv2.imshow('ViZDoom Simplemap Buffer', simple_map)
-            #    cv2.imshow('ViZDoom Automap Buffer', auto_map_buffer)
-            #    cv2.imshow('ViZDoom depth Buffer', depth_buffer)
-            #    cv2.imshow('ViZDoom labels Buffer', labels_buffer)
+            visualize_free_space(state)
 
             episode_dict[step] = [screen_buffer, depth_buffer, auto_map_buffer, labels_buffer, state.labels,
                                   state.game_variables, last_action]
+
+            #if auto_map_buffer is not None:
+            #    cv2.imshow('ViZDoom Automap Buffer', auto_map_buffer)
+            #    cv2.imshow('ViZDoom depth Buffer', depth_buffer)
+            #    cv2.imshow('ViZDoom labels Buffer', labels_buffer)
 
             cv2.waitKey(sleep_time)
 
