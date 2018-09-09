@@ -23,7 +23,6 @@ def spin_agent():
     return [1.0, 0.0, 0.0]
 
 def spin_beeline_agent(simple_map):
-    print(simple_map.shape)
     no_health = np.sum(simple_map == 3) == 0
     if no_health:
         return [1.0, 0.0, 0.0]
@@ -54,7 +53,6 @@ def spin_beeline_agent(simple_map):
         nx = l[0]
         ny = l[1]
 
-    print(d, nx, ny)
     return [left, right, forward]
 
 def compute_map(state, height=960, width=1280,
