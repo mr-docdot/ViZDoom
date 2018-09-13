@@ -160,7 +160,7 @@ if __name__ == "__main__":
     game.set_screen_resolution(vzd.ScreenResolution.RES_640X480)
 
     # Enables spectator mode, so you can play. Sounds strange but it is the agent who is supposed to watch not you.
-    game.set_window_visible(True)
+    game.set_window_visible(False)
     #game.set_mode(vzd.Mode.SPECTATOR)
     game.set_screen_format(vzd.ScreenFormat.BGR24)
 
@@ -190,6 +190,13 @@ if __name__ == "__main__":
     for perm in it.product([False, True], repeat=actions_num):
         actions.append(list(perm))
 
+    map_out = cv2.VideoWriter('map_vis_health' + '.avi',
+                               cv2.VideoWriter_fourcc(*'X264'),
+                               vzd.DEFAULT_TICRATE, (513, 513))
+
+    vid_out = cv2.VideoWriter('screen_vis_health' + '.avi',
+                               cv2.VideoWriter_fourcc(*'X264'),
+                               vzd.DEFAULT_TICRATE, (640, 480))
     for i in range(episodes):
         print("Episode #" + str(i + 1))
 
@@ -205,10 +212,13 @@ if __name__ == "__main__":
             reward = game.make_action(action)
             last_action = game.get_last_action()
 
+            ret = map_out.write(vis_map)
+            ret = vid_out.write(state.screen_buffer)
+
             #game.advance_action()
             #reward = game.get_last_reward()
 
-            cv2.imshow('ViZDoom Simple Map', vis_map)
+            #cv2.imshow('ViZDoom Simple Map', vis_map)
             cv2.waitKey(sleep_time)
 
             print("State #" + str(state.number))
@@ -223,3 +233,5 @@ if __name__ == "__main__":
         sleep(2.0)
 
     game.close()
+    map_out.release()
+    vid_out.release()

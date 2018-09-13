@@ -14,19 +14,72 @@ import random
 import vizdoom as vzd
 from vizdoom import Button
 from argparse import ArgumentParser
-import oblige
 import cv2
 import numpy as np
 import math
 
-DEFAULT_CONFIG = "../../scenarios/explorer.cfg"
-DEFAULT_SEED = 13
-DEFAULT_OUTPUT_FILE = "gen_scene_%d.wad" % (DEFAULT_SEED)
+DEFAULT_CONFIG = "../../scenarios/probe.cfg"
 
 def spin_agent(actions_num):
     actions = [ 0.0 ] * actions_num
     actions[8] = 1.0
     return actions
+
+def path_plan(actions_num, simple_map, vis_map):
+    action_sequence = []
+
+    no_beacon = np.sum(simple_map == 4) == 0
+    if no_beacon:
+        actions = [ 0.0 ] * actions_num
+        actions[8] = 1.0
+        return [actions], vis_map
+
+    center = simple_map.shape[0]/2.0
+
+    beacon_locs = np.where(simple_map == 4)
+    min_dist = 9999
+
+    nx = center
+    ny = center
+
+    for l in zip(beacon_locs[0], beacon_locs[1]):
+        xdiff = l[0] - center
+        ydiff = l[1] - center
+        d = abs(xdiff) + abs(ydiff)
+        if (d < min_dist):
+            min_dist = d
+
+            nx = l[0]
+            ny = l[1]
+
+    cx = int(center)
+    cy = int(center)
+
+    while(abs(cx-nx) > 0 or abs(cy-ny)>0):
+        actions = [ 0.0 ] * actions_num
+        change = False
+        if (cx - nx > 0) and (simple_map[cx - 1, cy] > 0):
+            cx = cx - 1
+            actions[7] = 1.0
+            action_sequence.append(actions)
+            change = True
+        elif (cy - ny < 0) and (simple_map[cx, cy + 1] > 0):
+            cy = cy + 1
+            actions[4] = 1.0
+            action_sequence.append(actions)
+            change = True
+        elif (cy - ny > 0) and (simple_map[cx, cy - 1] > 0):
+            cy = cy - 1
+            actions[5] = 1.0
+            action_sequence.append(actions)
+            change = True
+
+        if not change:
+            break
+
+        vis_map[cx, cy] = (0, 255, 255)
+
+    return action_sequence, vis_map
 
 def spin_beeline_agent(actions_num, simple_map):
     actions = [ 0.0 ] * actions_num
@@ -60,6 +113,16 @@ def spin_beeline_agent(actions_num, simple_map):
         ny = l[1]
 
     return actions
+
+def random_probe_sequence(length, actions_num):
+    action_sequence = []
+    for i in range(length):
+        actions = [ 0.0 ] * actions_num
+        action_idx = random.choice([4, 5, 7, 8, 9])
+        actions[action_idx] = 1.0
+        action_sequence.append(actions)
+
+    return action_sequence
 
 def compute_map(state, height=960, width=1280,
                map_size=256, map_scale=3, fov=90.0,
@@ -211,19 +274,6 @@ if __name__ == "__main__":
                         help="Path to the configuration file of the scenario."
                              " Please see "
                              "../../scenarios/*cfg for more scenarios.")
-    parser.add_argument("-s", "--seed",
-                        default=DEFAULT_SEED,
-                        type=int,
-                        help="Number of iterations(actions) to run")
-    parser.add_argument("-v", "--verbose",
-                        action="store_true",
-                        help="Use verbose mode during map generation.")
-    parser.add_argument("-o", "--output_file",
-                        default=DEFAULT_OUTPUT_FILE,
-                        help="Where the wad file will be created.")
-    parser.add_argument("-x", "--exit",
-                        action="store_true",
-                        help="Do not test the wad, just leave after generation.")
 
     args = parser.parse_args()
 
@@ -233,49 +283,14 @@ if __name__ == "__main__":
     game.set_doom_map("map01")
     game.set_doom_skill(3)
 
-    # Create Doom Level Generator instance and set optional seed.
-    generator = oblige.DoomLevelGenerator()
-    generator.set_seed(args.seed)
-
-    # Set generator configs, specified keys will be overwritten.
-    generator.set_config({
-        "size": "regular",
-        "health": "more",
-        "weapons": "sooner",
-        "theme": "jumble",
-        "mons": "none",
-        "stealth_mons": 0,
-        "switches": "none",
-        "teleporters": "none",
-        "darkness": "none",
-        "doors": "none",
-        "cages": "none",
-        "steepness": "none",
-        "keys": "none"})
-
-    # There are few predefined sets of settings already defined in Oblige package, like test_wad and childs_play_wad
-    #generator.set_config(oblige.childs_play_wad)
-
-    # Tell generator to generate few maps (options for "length": "single", "few", "episode", "game").
-    generator.set_config({"length": "few"})
-
-    # Generate method will return number of maps inside wad file.
-    wad_path = args.output_file
-    print("Generating {} ...".format(wad_path))
-    num_maps = generator.generate(wad_path, verbose=args.verbose)
-    print("Generated {} maps.".format(num_maps))
-
-    if args.exit:
-        exit(0)
-
     # Set Scenario to the new generated WAD
-    game.set_doom_scenario_path(args.output_file)
+    game.set_doom_scenario_path('gen_scene_13.wad')
 
     # Sets up game for spectator (you)
     #game.add_game_args("+freelook 1")
     game.set_screen_resolution(vzd.ScreenResolution.RES_1280X960)
     #game.set_window_visible(True)
-    game.set_window_visible(True)
+    game.set_window_visible(False)
     #game.set_mode(vzd.Mode.SPECTATOR)
     game.set_render_hud(False)
 
@@ -326,11 +341,11 @@ if __name__ == "__main__":
     # Play until the game (episode) is over.
     actions_num = game.get_available_buttons_size()
 
-    map_out = cv2.VideoWriter('map_vis_' + str(DEFAULT_SEED) + '.avi',
+    map_out = cv2.VideoWriter('map_vis_probe' + '.avi',
                                cv2.VideoWriter_fourcc(*'X264'),
                                vzd.DEFAULT_TICRATE, (513, 513))
 
-    vid_out = cv2.VideoWriter('screen_vis_' + str(DEFAULT_SEED) + '.avi',
+    vid_out = cv2.VideoWriter('screen_vis_probe' + '.avi',
                                cv2.VideoWriter_fourcc(*'X264'),
                                vzd.DEFAULT_TICRATE, (1280, 960))
 
@@ -349,6 +364,8 @@ if __name__ == "__main__":
         step = 0
         curr_goal = None
 
+        action_sequence = []
+
         while not game.is_episode_finished():
             state = game.get_state()
 
@@ -361,7 +378,7 @@ if __name__ == "__main__":
             time = game.get_episode_time()
 
             pick_new_goal = False
-            if step%10 == 0:
+            if len(action_sequence) == 0:
                 pick_new_goal = True
 
             vis_map, simple_map, curr_goal = compute_map(state,
@@ -372,10 +389,19 @@ if __name__ == "__main__":
             ret = map_out.write(vis_map)
             ret = vid_out.write(screen_buffer)
 
-            #action = spin_agent(actions_num)
             action = spin_beeline_agent(actions_num, simple_map)
+
             reward = game.make_action(action)
             last_action = game.get_last_action()
+
+            #cv2.imshow('Simple map', vis_map)
+            #cv2.imshow('Plan', vis_plan)
+            #cv2.imshow('Screen', screen_buffer)
+
+            if pick_new_goal:
+                cv2.imwrite('data/map_' + str(step) + '.png', vis_map)
+                #cv2.waitKey(0)
+
 
             #if auto_map_buffer is not None:
             #    cv2.imshow('ViZDoom Automap Buffer', auto_map_buffer)
@@ -399,8 +425,3 @@ if __name__ == "__main__":
     game.close()
     map_out.release()
     vid_out.release()
-
-    # Remove output of generator
-    #os.remove(wad_path)
-    #os.remove(wad_path.replace("wad", "old"))
-    #os.remove(wad_path.replace("wad", "txt"))
