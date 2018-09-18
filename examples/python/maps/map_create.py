@@ -107,7 +107,7 @@ if __name__ == "__main__":
     # Sets up game for spectator (you)
     game.add_game_args("+freelook 1")
     game.set_screen_resolution(vzd.ScreenResolution.RES_1280X960)
-    game.set_window_visible(True)
+    game.set_window_visible(False)
     #game.set_mode(vzd.Mode.SPECTATOR)
     game.set_render_hud(False)
 

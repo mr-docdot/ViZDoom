@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
 
-#####################################################################
-# This script presents how to use the environment with PyOblige.
-# https://github.com/mwydmuch/PyOblige
-#####################################################################
-
 from __future__ import print_function
 from time import sleep
 import os
@@ -216,7 +211,7 @@ def compute_map(state, height=960, width=1280,
 
     return vis_map, simple_map, curr_goal
 
-def explorer(config, scenario, episode):
+def explorer(config, scenario, episode, vid_out_name=None):
 
     game = vzd.DoomGame()
     # Use your config
@@ -271,15 +266,12 @@ def explorer(config, scenario, episode):
     game.add_game_args("+am_cheat 1")
     game.add_game_args("+sv_cheats 1")
 
-    # Play as many episodes as maps in the new generated WAD file.
-    episodes = 5
     scenario_name = scenario.split('.')[0]
 
     game.init()
 
     # Play until the game (episode) is over.
     actions_num = game.get_available_buttons_size()
-
 
     game.set_doom_map("map01")
 
@@ -289,6 +281,12 @@ def explorer(config, scenario, episode):
     step = 0
     curr_goal = None
     explored_goals = {}
+
+    vid_out = None
+    if vid_out_name is not None:
+        vid_out = cv2.VideoWriter(vid_out_name,
+                                  cv2.VideoWriter_fourcc(*'X264'),
+                                  vzd.DEFAULT_TICRATE, (1280, 960))
 
     while not game.is_episode_finished():
         state = game.get_state()
@@ -312,6 +310,9 @@ def explorer(config, scenario, episode):
         reward = game.make_action(action)
         last_action = game.get_last_action()
 
+        if vid_out:
+            ret = vid_out.write(screen_buffer)
+
         #if auto_map_buffer is not None:
         #    cv2.imshow('ViZDoom Automap Buffer', auto_map_buffer)
         #    cv2.imshow('ViZDoom depth Buffer', depth_buffer)
@@ -320,6 +321,8 @@ def explorer(config, scenario, episode):
         step = step + 1
 
     game.close()
+    if vid_out:
+        vid_out.release()
 
 if __name__ == "__main__":
     explorer(DEFAULT_CONFIG, 'gen_9_size_small_mons_none_steepness_none.wad', 0)
