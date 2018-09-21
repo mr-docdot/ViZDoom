@@ -104,6 +104,7 @@ def update_grid_map(state, height=960, width=1280,
             if n in visble_beacons_world:
                 if (b, n) not in edges:
                     edges[(b, n)] = True
+                    edges[(n, b)] = True
 
                 """
                 visible_region = (simple_map > 0)
@@ -292,7 +293,8 @@ def get_auto_map(config, scenario):
     return state.automap_buffer
 
 def plot_points(points, vis_map, center_x, center_y,
-                map_scale = 5, vis_color = (255, 0, 0)):
+                map_scale = 5, vis_color = (255, 0, 0),
+                point_size = 3):
     bound_x = vis_map.shape[0]
     bound_y = vis_map.shape[1]
     for p in points:
@@ -300,7 +302,7 @@ def plot_points(points, vis_map, center_x, center_y,
         vis_y = int((p[0] - center_x)/map_scale + bound_y/2)
         if (vis_x < bound_x and vis_y < bound_y and
             vis_x >=0 and vis_y >=0):
-            cv2.circle(vis_map, (vis_y, vis_x), 3, vis_color, thickness=-1)
+            cv2.circle(vis_map, (vis_y, vis_x), point_size, vis_color, thickness=-1)
 
 def plot_edges(edges, vis_map, center_x, center_y,
                 map_scale = 5, vis_color = (0, 255, 0)):
