@@ -98,6 +98,10 @@ def update_grid_map(state, height=960, width=1280,
                       (b[0], b[1] + grid_scale),
                       (b[0] - grid_scale, b[1]),
                       (b[0] + grid_scale, b[1]),
+                      (b[0] - grid_scale, b[1] - grid_scale),
+                      (b[0] + grid_scale, b[1] + grid_scale),
+                      (b[0] - grid_scale, b[1] + grid_scale),
+                      (b[0] + grid_scale, b[1] - grid_scale),
                     ]
 
         for n in neighbors:

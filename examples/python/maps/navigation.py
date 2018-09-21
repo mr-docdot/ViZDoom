@@ -136,7 +136,12 @@ def bfs(start, nodes, edges, grid_scale = 50):
                       (curr[0], curr[1] + grid_scale),
                       (curr[0] - grid_scale, curr[1]),
                       (curr[0] + grid_scale, curr[1]),
+                      (curr[0] - grid_scale, curr[1] - grid_scale),
+                      (curr[0] + grid_scale, curr[1] + grid_scale),
+                      (curr[0] - grid_scale, curr[1] + grid_scale),
+                      (curr[0] + grid_scale, curr[1] - grid_scale),
                     ]
+
         for n in neighbors:
             if (n not in in_queue) and ((curr, n) in edges):
                 s.put((n, d+1, curr))
@@ -274,17 +279,18 @@ def navigator(config, scenario, nodes, edges, map_vis=None,
             path = pick_path((player_x, player_y, player_z),
                               nodes, edges, min_path_length=20)
             birds_eye_vis = auto_map.copy()
-            end, _ = path[0]
-            start, _ = path[-1]
+            if path:
+                end, _ = path[0]
+                start, _ = path[-1]
 
-            vis_path = [ p[0] for p in path ]
-            plot_points(vis_path, birds_eye_vis, start_x, start_y,
-                        vis_color = (255, 0, 255), point_size = 4)
+                vis_path = [ p[0] for p in path ]
+                plot_points(vis_path, birds_eye_vis, start_x, start_y,
+                            vis_color = (255, 0, 255), point_size = 4)
 
-            plot_points([start], birds_eye_vis, start_x, start_y,
-                        vis_color = (255, 255, 0), point_size = 4)
-            plot_points([end], birds_eye_vis, start_x, start_y,
-                        vis_color = (0, 255, 255), point_size = 4)
+                plot_points([start], birds_eye_vis, start_x, start_y,
+                            vis_color = (255, 255, 0), point_size = 4)
+                plot_points([end], birds_eye_vis, start_x, start_y,
+                            vis_color = (0, 255, 255), point_size = 4)
 
         vis_map, simple_map, curr_goal = compute_map(state,
                                                      path = path)
