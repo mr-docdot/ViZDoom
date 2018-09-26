@@ -74,7 +74,18 @@ def compute_map(state, height=960, width=1280,
 
     visble_path_locations = []
     farthest_path_loc = None
-    max_dist = 0
+
+    min_dist_world = float("inf")
+    min_dist_path = float("inf")
+
+    for p, d in path:
+        object_relative_x = -p[0] + player_x
+        object_relative_y = -p[1] + player_y
+        if (abs(object_relative_y) + abs(object_relative_x)) < min_dist_world:
+            min_dist_world = abs(object_relative_y) + abs(object_relative_x)
+            min_dist_path = d
+
+    max_dist = min_dist_path
 
     for p, d in path:
         object_relative_x = -p[0] + player_x
@@ -149,9 +160,9 @@ def bfs(start, nodes, edges, grid_scale = 50):
 
     return distances
 
-def pick_path(curr_location, nodes, edges, min_path_length = 20):
+def pick_path(curr_location, nodes, edges, min_path_length = 15):
     nearest_node = None
-    min_dist = 99999
+    min_dist = float("inf")
     for n in nodes:
         dist = abs(curr_location[0] - n[0]) + abs(curr_location[1] - n[1])
         if dist < min_dist:
@@ -159,7 +170,6 @@ def pick_path(curr_location, nodes, edges, min_path_length = 20):
             nearest_node = n
 
     distances = bfs(nearest_node, nodes, edges)
-    print(distances)
 
     distant_nodes = []
     for n in distances:
@@ -168,6 +178,7 @@ def pick_path(curr_location, nodes, edges, min_path_length = 20):
             distant_nodes.append(n)
 
     path = []
+    distance_field = {}
     if len(distant_nodes) > 0 :
         node_idx = random.randint(0, len(distant_nodes) - 1)
         curr = distant_nodes[node_idx]
@@ -176,10 +187,12 @@ def pick_path(curr_location, nodes, edges, min_path_length = 20):
             path.append((curr, d))
             curr = prev
 
-    return path
+        distance_field = bfs(distant_nodes[node_idx], nodes, edges)
+
+    return path, distance_field
 
 def navigator(config, scenario, nodes, edges, map_vis=None,
-              vid_out_name=None):
+              vid_out_name=None, min_path_length = 15):
 
     game = vzd.DoomGame()
     # Use your config
@@ -257,6 +270,10 @@ def navigator(config, scenario, nodes, edges, map_vis=None,
                                   vzd.DEFAULT_TICRATE, (2*1280, 960))
 
     path = []
+    beacons = []
+    trail_info = []
+    num_trails = 0
+    success_trails = 0
 
     while not game.is_episode_finished():
         state = game.get_state()
@@ -276,9 +293,22 @@ def navigator(config, scenario, nodes, edges, map_vis=None,
             start_y = player_y
 
         if step%500 == 0:
-            path = pick_path((player_x, player_y, player_z),
-                              nodes, edges, min_path_length=20)
-            birds_eye_vis = auto_map.copy()
+            if step > 0 and path:
+                num_trails = num_trails + 1
+                prev_goal, _ = path[0]
+                distance_to_goal = abs(prev_goal[0] - player_x) + \
+                                   abs(prev_goal[1] - player_y)
+                print('Distance to Goal:', distance_to_goal, len(path))
+                trail_info.append(((player_x, player_y), path))
+                if distance_to_goal < 100:
+                    success_trails = success_trails + 1
+
+            path, distance_field = pick_path((player_x, player_y, player_z),
+                                              nodes, edges,
+                                              min_path_length=min_path_length)
+            birds_eye_vis = map_vis.copy()
+
+            beacons = []
             if path:
                 end, _ = path[0]
                 start, _ = path[-1]
@@ -292,8 +322,11 @@ def navigator(config, scenario, nodes, edges, map_vis=None,
                 plot_points([end], birds_eye_vis, start_x, start_y,
                             vis_color = (0, 255, 255), point_size = 4)
 
+                for b in distance_field:
+                    beacons.append((b, -distance_field[b][0]))
+
         vis_map, simple_map, curr_goal = compute_map(state,
-                                                     path = path)
+                                                     path = beacons)
         plot_points([(player_x, player_y)], birds_eye_vis, start_x, start_y,
                     vis_color = (0, 0, 255), point_size = 2)
 
@@ -316,8 +349,10 @@ def navigator(config, scenario, nodes, edges, map_vis=None,
     if vid_out:
         vid_out.release()
 
+    return trail_info, num_trails, success_trails
+
 if __name__ == "__main__":
-    scenario_path = 'gen_93_size_regular_mons_none_steepness_none.wad'
+    scenario_path = 'gen_1_size_regular_mons_none_steepness_none.wad'
     config_path = '../../../scenarios/explorer.cfg'
     auto_map = get_auto_map(config_path, scenario_path)
 
@@ -325,7 +360,7 @@ if __name__ == "__main__":
 
     nodes = {}
     edges = {}
-    for e in range(1):
+    for e in range(4):
         start_point = map_scenario(config_path, scenario_path,
                                    e, nodes = nodes, edges = edges)
 
@@ -333,6 +368,11 @@ if __name__ == "__main__":
     plot_points(nodes.keys(), auto_map, start_point[0], start_point[1])
     plot_edges(edges.keys(), auto_map, start_point[0], start_point[1])
 
-    navigator(config_path, scenario_path,
-              nodes, edges, map_vis = auto_map,
-              vid_out_name = 'test_navigator.avi')
+    info, num_trails, success_trails = \
+            navigator(config_path, scenario_path,
+                      nodes, edges, map_vis = auto_map,
+                      vid_out_name = 'test_navigator.avi',
+                      min_path_length = 30)
+
+    np.save('test.npy', np.array([info, num_trails, success_trails]))
+    print(success_trails, num_trails)

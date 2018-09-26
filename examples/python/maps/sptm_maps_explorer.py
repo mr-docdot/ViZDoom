@@ -1,7 +1,7 @@
 from explorer import explorer
 import glob
 
-num_episodes = 4
+num_episodes = 8
 
 for scenario in glob.glob('*.wad'):
     for e in range(num_episodes):

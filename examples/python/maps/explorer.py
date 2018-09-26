@@ -88,11 +88,11 @@ def compute_map(state, height=960, width=1280,
     _, p3, p4 = cv2.clipLine((0, 0, canvas_size, canvas_size), (map_size, map_size),
                              (map_size + x2, map_size + y2))
 
-    game_unit = 110.0/14
+    game_unit = 100.0/14
     ray_cast = (depth_buffer[height/2] * game_unit)/float(map_scale)
 
     ray_points = [ (map_size, map_size) ]
-    for i in range(canvas_size):
+    for i in range(10, canvas_size-10):
         d = ray_cast[int(float(width)/canvas_size * i - 1)]
         theta = (float(i)/canvas_size * fov)
 
@@ -105,24 +105,6 @@ def compute_map(state, height=960, width=1280,
 
     cv2.fillPoly(vis_map, np.array([ray_points], dtype=np.int32), (255, 255, 255))
     cv2.fillPoly(simple_map, np.array([ray_points], dtype=np.int32), (1, 1, 1))
-
-    for l in state.labels:
-        object_relative_x = -l.object_position_x + player_x
-        object_relative_y = -l.object_position_y + player_y
-        object_relative_z = -l.object_position_z + player_z
-
-        rotated_x = math.cos(math.radians(-player_angle)) * object_relative_x - math.sin(math.radians(-player_angle)) * object_relative_y
-        rotated_y = math.sin(math.radians(-player_angle)) * object_relative_x + math.cos(math.radians(-player_angle)) * object_relative_y
-
-        rotated_x = int(rotated_x/map_scale + map_size)
-        rotated_y = int(rotated_y/map_scale + map_size)
-
-        if (rotated_x >= 0 and rotated_x < canvas_size and
-            rotated_y >= 0 and rotated_y < canvas_size):
-            color = (0, 0, 255)
-            object_id = 2
-            simple_map[rotated_x, rotated_y] = object_id
-            cv2.circle(vis_map, (rotated_y, rotated_x), 2, color, thickness=-1)
 
     quantized_x = int(player_x/beacon_scale) * beacon_scale
     quantized_y = int(player_y/beacon_scale) * beacon_scale
@@ -286,7 +268,7 @@ def explorer(config, scenario, episode, vid_out_name=None):
     if vid_out_name is not None:
         vid_out = cv2.VideoWriter(vid_out_name,
                                   cv2.VideoWriter_fourcc(*'X264'),
-                                  vzd.DEFAULT_TICRATE, (1280, 960))
+                                  vzd.DEFAULT_TICRATE, (2*1280, 960))
 
     while not game.is_episode_finished():
         state = game.get_state()
@@ -310,8 +292,12 @@ def explorer(config, scenario, episode, vid_out_name=None):
         reward = game.make_action(action)
         last_action = game.get_last_action()
 
+        vis_map_large = np.zeros(screen_buffer.shape, dtype=np.uint8)
+        vis_map_large[0:vis_map.shape[0], 0:vis_map.shape[1], :] = vis_map
+
         if vid_out:
-            ret = vid_out.write(screen_buffer)
+            vis_buffer = np.concatenate([screen_buffer, vis_map_large], axis=1)
+            ret = vid_out.write(vis_buffer)
 
         #if auto_map_buffer is not None:
         #    cv2.imshow('ViZDoom Automap Buffer', auto_map_buffer)
@@ -325,5 +311,4 @@ def explorer(config, scenario, episode, vid_out_name=None):
         vid_out.release()
 
 if __name__ == "__main__":
-    explorer(DEFAULT_CONFIG, 'gen_9_size_small_mons_none_steepness_none.wad', 0)
-    explorer(DEFAULT_CONFIG, 'gen_9_size_small_mons_none_steepness_none.wad', 1)
+    explorer(DEFAULT_CONFIG, 'sptm_maps/office1.wad', 99, vid_out_name='debug.avi')

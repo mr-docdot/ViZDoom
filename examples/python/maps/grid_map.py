@@ -49,7 +49,7 @@ def update_grid_map(state, height=960, width=1280,
     ray_cast = (depth_buffer[height/2] * game_unit)/float(map_scale)
 
     ray_points = [ (map_size, map_size) ]
-    for i in range(canvas_size):
+    for i in range(10, canvas_size-10):
         d = ray_cast[int(float(width)/canvas_size * i - 1)]
         theta = (float(i)/canvas_size * fov)
 
@@ -335,20 +335,20 @@ def filter_graph(nodes, edges):
 
 
 if __name__ == "__main__":
-    auto_map = get_auto_map('../../../scenarios/explorer.cfg',
-                            'gen_64_size_regular_mons_none_steepness_none.wad')
+    scenario_path = 'sptm_maps/office1.wad'
+    config_path = '../../../scenarios/explorer.cfg'
+    auto_map = get_auto_map(config_path, scenario_path)
 
     paths = []
     color = {0: (255, 0, 0), 1: (0, 255, 0), 2: (0, 0, 255), 3: (255, 0, 255)}
 
     nodes = {}
     edges = {}
-    for e in range(1):
-        start_point = map_scenario('../../../scenarios/explorer.cfg',
-                                   'gen_64_size_regular_mons_none_steepness_none.wad',
+    for e in range(4):
+        start_point = map_scenario(config_path, scenario_path,
                                    e, nodes = nodes, edges = edges)
 
-    filter_graph(nodes, edges)
+    #filter_graph(nodes, edges)
     plot_points(nodes.keys(), auto_map, start_point[0], start_point[1])
     plot_edges(edges.keys(), auto_map, start_point[0], start_point[1])
     cv2.imwrite('./outs/test.png', auto_map)
