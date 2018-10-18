@@ -19,3 +19,8 @@ def setup_training_paths(experiment_id):
   os.makedirs(logs_path)
   os.makedirs(models_path)
   return logs_path, current_model_path
+
+def setup_game(wad):
+  game = doom_navigation_setup(TEST_RANDOM_SEED, wad)
+  wait_idle(game, WAIT_BEFORE_START_TICS)
+  return game
