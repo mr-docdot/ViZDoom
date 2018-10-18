@@ -1,6 +1,7 @@
-import explorer
 import time
 
+from beeline_navigator import explore
+from natsort import natsorted
 from os import listdir
 from os.path import isfile, join
 
@@ -9,6 +10,7 @@ def get_valid_wad_paths(wad_dir):
     all_files = [f for f in listdir(wad_dir) if isfile(join(wad_dir, f))]
     wad_files = [f for f in all_files if f.endswith('wad')]
     wad_paths = [join(wad_dir, f) for f in wad_files]
+    wad_paths = natsorted(wad_paths)
 
     return wad_paths
 
@@ -23,8 +25,8 @@ for idx, wad_path in enumerate(wad_paths):
     start = time.time()
 
     for i in range(num_explorations):
-        explorer.explore(default_cfg_path, wad_path, i,
-                         lmp_out_dir='../../data/exploration')
+        explore(default_cfg_path, wad_path, i,
+                lmp_out_dir='../../data/exploration')
 
     end = time.time()
     elapsed_time = end - start

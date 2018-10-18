@@ -164,9 +164,12 @@ def compute_map(state, height=960, width=1280,
             max_dist = 0
             for b in range(len(unexplored_beacons)):
                 xdiff = unexplored_beacons[b][0] - player_x
-                ydiff = unexplored_beacons[b][1] - player_y
-                d = abs(xdiff) + abs(ydiff)
-                if d > max_dist:
+                ydiff =
+            diff_y = curr_goal[1] - player_y unexplored_beacons[b][1] - player_y
+                d = abs
+            diff_y = curr_goal[1] - player_y(xdiff) + abs(ydiff)
+                if d > 
+            diff_y = curr_goal[1] - player_ymax_dist:
                     beacon_idx = b
                     max_dist = d
             """
@@ -283,6 +286,7 @@ def explore(config, scenario, episode, lmp_out_dir='.', vid_out_name=None):
                                   cv2.VideoWriter_fourcc(*'XVID'),
                                   vzd.DEFAULT_TICRATE, (2*1280, 960))
 
+    relative_goals = np.zeros((4200, 2))
     while not game.is_episode_finished():
         state = game.get_state()
 
@@ -305,6 +309,21 @@ def explore(config, scenario, episode, lmp_out_dir='.', vid_out_name=None):
         reward = game.make_action(action)
         last_action = game.get_last_action()
 
+        # Compute and save relative distance to goal
+        player_x = state.game_variables[5]
+        player_y = state.game_variables[6]
+        player_angle = state.game_variables[8]
+        if curr_goal is not None:
+            diff_x = curr_goal[0] - player_x
+            diff_y = curr_goal[1] - player_y
+            relative_goals[step] = np.array([diff_x, diff_y])
+        else:
+            # Project to location behind the agent
+            line_length = 250
+            proj_x = player_x + math.cos(math.radians(player_angle)) * line_length * -1
+            proj_y = player_y + math.sin(math.radians(player_angle)) * line_length * -1
+            relative_goals[step] = np.array([proj_x, proj_y])
+
         vis_map_large = np.zeros(screen_buffer.shape, dtype=np.uint8)
         vis_map_large[0:vis_map.shape[0], 0:vis_map.shape[1], :] = vis_map
 
@@ -318,6 +337,10 @@ def explore(config, scenario, episode, lmp_out_dir='.', vid_out_name=None):
         #    cv2.imshow('ViZDoom labels Buffer', labels_buffer)
 
         step = step + 1
+
+    # Save goals at each step to disk
+    goals_path = lmp_path.split('.lmp')[0] + '.npy'
+    np.save(goals_path, relative_goals)
 
     game.close()
     if vid_out:
