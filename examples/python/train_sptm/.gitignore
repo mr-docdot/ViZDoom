@@ -1,1 +1,3 @@
 .vscode
+data/exploration/*
+.python-version
