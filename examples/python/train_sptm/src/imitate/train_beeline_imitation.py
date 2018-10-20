@@ -74,7 +74,6 @@ def data_generator(data_dir, wad_dir, batch_size):
         for i, idx in enumerate(np.random.randint(0, len(games), batch_size)): # NOQA
             game = games[idx]
             game_id = game_ids[idx]
-            print("Game ID: " + str(game_id))
 
             # Initialize game with LMP if never sampled before
             if game.is_new_episode():
@@ -82,31 +81,32 @@ def data_generator(data_dir, wad_dir, batch_size):
                 goals_path = join(data_dir, goals_template.format(game_id, lmp_id))
                 game_goals[idx] = np.load(goals_path)
                 game_steps[idx] = 2
+                print(game.get_episode_time())
 
+            if game.is_episode_finished():
+                lmp_id = set_random_lmp(game, game_ids[idx], data_dir, num_saved_eps)
+                lmp_id = set_random_lmp(game, game_ids[idx], data_dir, num_saved_eps)
+                goals_path = join(data_dir, goals_template.format(game_id, lmp_id))
+                game_goals[idx] = np.load(goals_path)
+                game_steps[idx] = 2
+                print(game.get_episode_time())
+            print("Game time: " + str(game.get_episode_time()))
             # Sample num_steps actions from game and record state
             for step in range(num_steps):
-                overall_step = game_steps[idx]
+                current_time = game.get_episode_time()
                 if not game.is_episode_finished():
-                    print(game.get_episode_time())
+                    # print(game.get_episode_time())
                     frame, depth, action = get_advance_agent_state(game)
                     frames[i][step] = frame
                     depths[i][step] = depth
-                    goals[i][step] = game_goals[idx][overall_step - 1]
+                    goals[i][step] = game_goals[idx][current_time - 1]
                     actions[i][step] = action
                 else:
                     frames[i][step] = frames[i][step - 1]
                     depths[i][step] = depths[i][step - 1]
                     goals[i][step] = goals[i][step - 1]
                     actions[i][step] = actions[i][step - 1]
-                    print(game.get_episode_time())
-                    lmp_id = set_random_lmp(game, game_ids[idx], data_dir, num_saved_eps)
-                    goals_path = join(data_dir, goals_template.format(game_id, lmp_id))
-                    print(game.get_episode_time())
-                    game_goals[idx] = np.load(goals_path)
-                    game_steps[idx] = 2
-                    print(game.get_episode_time())
                     print('lol')
-                game_steps[idx] = overall_step + 1
     
 
         # Reshape output for batch
