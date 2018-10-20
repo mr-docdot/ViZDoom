@@ -16,13 +16,11 @@ def get_sorted_wad_ids(wad_dir):
 
 def set_random_lmp(game, wad_id, lmp_dir, num_saved_eps):
     lmp_template = '{}_{}_rec.lmp'
-
     ep_idx = np.random.randint(0, num_saved_eps, 1)[0]
-    ep_idx = 0
     lmp_filename = lmp_template.format(wad_id, ep_idx)
     lmp_path = join(lmp_dir, lmp_filename)
-    game.replay_episode(lmp_path)
 
+    game.replay_episode(lmp_path)
     return ep_idx
 
 
@@ -54,10 +52,8 @@ def data_generator(data_dir, wad_dir, batch_size):
     game_ids = []
     wad_ids = get_sorted_wad_ids(wad_dir)
     game_goals = np.zeros((len(wad_ids), ep_len, 2))
-    game_steps = np.zeros(len(wad_ids), dtype=np.int)
-    lmp_ids = np.zeros(len(wad_ids))
 
-    for wad_id in wad_ids[:1]:
+    for wad_id in wad_ids:
         wad_path = join(wad_dir, wad_template.format(wad_id))
         game = setup_game(wad_path)
         games.append(game)
@@ -75,27 +71,24 @@ def data_generator(data_dir, wad_dir, batch_size):
             game = games[idx]
             game_id = game_ids[idx]
 
-            # Initialize game with LMP if never sampled before
+            # Set random LMP for game if never sampled before
             if game.is_new_episode():
                 lmp_id = set_random_lmp(game, game_id, data_dir, num_saved_eps)
                 goals_path = join(data_dir, goals_template.format(game_id, lmp_id))
                 game_goals[idx] = np.load(goals_path)
-                game_steps[idx] = 2
-                print(game.get_episode_time())
 
+            # Re-initialize game with random LMP if episode over
             if game.is_episode_finished():
-                lmp_id = set_random_lmp(game, game_ids[idx], data_dir, num_saved_eps)
+                game.close()
+                game.init()
                 lmp_id = set_random_lmp(game, game_ids[idx], data_dir, num_saved_eps)
                 goals_path = join(data_dir, goals_template.format(game_id, lmp_id))
                 game_goals[idx] = np.load(goals_path)
-                game_steps[idx] = 2
-                print(game.get_episode_time())
-            print("Game time: " + str(game.get_episode_time()))
+
             # Sample num_steps actions from game and record state
             for step in range(num_steps):
                 current_time = game.get_episode_time()
                 if not game.is_episode_finished():
-                    # print(game.get_episode_time())
                     frame, depth, action = get_advance_agent_state(game)
                     frames[i][step] = frame
                     depths[i][step] = depth
@@ -106,22 +99,22 @@ def data_generator(data_dir, wad_dir, batch_size):
                     depths[i][step] = depths[i][step - 1]
                     goals[i][step] = goals[i][step - 1]
                     actions[i][step] = actions[i][step - 1]
-                    print('lol')
-    
 
         # Reshape output for batch
         for i in range(num_steps):
             batch_frames = frames[:, i, :, :, :]
             batch_depths = depths[:, i, :, :][:, :, :, np.newaxis]
-            batch_x = np.concatenate((batch_frames, batch_depths), axis=3)
-            batch_y = actions[:, i, :]
-            yield (batch_x, batch_y)
+            batch_rgbd = np.concatenate((batch_frames, batch_depths), axis=3)
+            batch_goal = goals[:, i, :]
+
+            batch_target = actions[:, i, :]
+            yield ((batch_rgbd, batch_goal), batch_target)
 
 
 wad_dir = '../../data/maps/out/'
 data_dir = '../../data/exploration/'
 
-generator = data_generator(data_dir, wad_dir, 1)
+generator = data_generator(data_dir, wad_dir, 32)
 i = 0
 
 for data in generator:
