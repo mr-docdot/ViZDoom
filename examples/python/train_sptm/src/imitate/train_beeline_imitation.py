@@ -1,8 +1,10 @@
+import keras.optimizers
 import numpy as np
+import resnet
 
 from os import listdir
 from os.path import isfile, join
-from setup import setup_game
+from setup import setup_game, setup_training_paths
 
 
 def get_sorted_wad_ids(wad_dir):
@@ -53,7 +55,7 @@ def data_generator(data_dir, wad_dir, batch_size):
     wad_ids = get_sorted_wad_ids(wad_dir)
     game_goals = np.zeros((len(wad_ids), ep_len, 2))
 
-    for wad_id in wad_ids:
+    for wad_id in wad_ids[:5]:
         wad_path = join(wad_dir, wad_template.format(wad_id))
         game = setup_game(wad_path)
         games.append(game)
@@ -108,16 +110,39 @@ def data_generator(data_dir, wad_dir, batch_size):
             batch_goal = goals[:, i, :]
 
             batch_target = actions[:, i, :]
-            yield ((batch_rgbd, batch_goal), batch_target)
+            # yield ((batch_rgbd, batch_goal), batch_target)
+            yield (batch_rgbd, batch_target)
 
 
 wad_dir = '../../data/maps/out/'
 data_dir = '../../data/exploration/'
+batch_size = 32
 
-generator = data_generator(data_dir, wad_dir, 32)
+generator = data_generator(data_dir, wad_dir, batch_size)
 i = 0
 
 for data in generator:
     i += 1
     if i % 1000 == 0:
         print(i)
+    print(data[0][0].shape)
+    print(data[1].shape)
+    break
+
+# Setup directories to save logs and models
+experiment_id = 'beeline'
+logs_path, current_model_path = setup_training_paths(experiment_id)
+
+# Build model
+model = resnet.ResnetBuilder.build_resnet_18((4, 240, 320), 21, False)
+adam = keras.optimizers.Adam(lr=1e-04, beta_1=0.9, beta_2=0.999, epsilon=1e-08,
+                             decay=0.0)
+model.compile(loss='mean_squared_error', optimizer=adam, metrics=['accuracy'])
+callbacks_list = [keras.callbacks.TensorBoard(log_dir=logs_path,
+                                              write_graph=False),
+                  keras.callbacks.ModelCheckpoint(current_model_path,
+                                                  period=100)]
+model.fit_generator(generator,
+                    steps_per_epoch=100,
+                    epochs=10,
+                    callbacks=callbacks_list)

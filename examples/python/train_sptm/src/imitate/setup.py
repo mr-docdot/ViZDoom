@@ -1,7 +1,9 @@
+import os
 import tensorflow as tf
 import vizdoom as vzd
 
 from keras.backend.tensorflow_backend import set_session
+from os.path import exists, join
 
 # limit memory usage
 config = tf.ConfigProto()
@@ -10,6 +12,26 @@ config.gpu_options.per_process_gpu_memory_fraction = TRAIN_MEMORY_FRACTION
 set_session(tf.Session(config=config))
 
 DEFAULT_CONFIG = '../explore/explorer.cfg'
+
+
+def setup_training_paths(experiment_id):
+    # Built appropriate paths
+    experiments_dir = '../../experiments/'
+    experiment_dir = join(experiments_dir, '{}/'.format(experiment_id))
+    logs_path = join(experiment_dir, 'logs/')
+    models_path = join(experiment_dir, 'models/')
+    current_model_path = join(models_path, 'model.{epoch:02d}.h5')
+
+    # Check that dir doesn't already exist so we don't overwrite
+    assert (not exists(experiment_dir)), 'Experiment dir {} already exists'\
+        .format(experiment_dir)
+
+    # Create appropriate directories
+    os.makedirs(experiment_dir)
+    os.makedirs(logs_path)
+    os.makedirs(models_path)
+
+    return logs_path, current_model_path
 
 
 def setup_game(wad):
