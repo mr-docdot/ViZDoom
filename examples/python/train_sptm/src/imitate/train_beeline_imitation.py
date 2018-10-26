@@ -2,6 +2,8 @@ import keras.optimizers
 import numpy as np
 import resnet
 
+from keras.models import Sequential
+from keras.layers import Dense, Activation
 from os import listdir
 from os.path import isfile, join
 from setup import setup_game, setup_training_paths
@@ -110,8 +112,7 @@ def data_generator(data_dir, wad_dir, batch_size):
             batch_goal = goals[:, i, :]
 
             batch_target = actions[:, i, :]
-            # yield ((batch_rgbd, batch_goal), batch_target)
-            yield (batch_rgbd, batch_target)
+            yield ([batch_rgbd, batch_goal], batch_target)
 
 
 wad_dir = '../../data/maps/out/'
@@ -120,14 +121,6 @@ batch_size = 32
 
 generator = data_generator(data_dir, wad_dir, batch_size)
 i = 0
-
-for data in generator:
-    i += 1
-    if i % 1000 == 0:
-        print(i)
-    print(data[0][0].shape)
-    print(data[1].shape)
-    break
 
 # Setup directories to save logs and models
 experiment_id = 'beeline'

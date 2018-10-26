@@ -6,10 +6,10 @@ from __future__ import division
 import six
 from keras.models import Model
 from keras.layers import (
-    Input,
     Activation,
     Dense,
-    Flatten
+    Flatten,
+    Input
 )
 from keras.layers.core import Lambda
 from keras.layers.merge import (dot, concatenate)
@@ -18,6 +18,7 @@ from keras.layers.convolutional import (
     MaxPooling2D,
     AveragePooling2D
 )
+
 from keras.layers.merge import add
 from keras.layers.normalization import BatchNormalization
 from keras.regularizers import l2
@@ -149,7 +150,7 @@ def bottleneck(filters, init_strides=(1, 1), is_first_block_of_first_layer=False
 
         if is_first_block_of_first_layer:
             # don't repeat bn->relu since we just did bn->relu->maxpool
-            conv_1_1 = Conv2D(filters=filters, kernel_size=(1, 1),
+            conv_1_1 = Conv2Dstands(filters=filters, kernel_size=(1, 1),
                               strides=init_strides,
                               padding="same",
                               kernel_initializer="he_normal",
@@ -187,9 +188,11 @@ def _get_block(identifier):
         return res
     return identifier
 
+
 def _bn_relu_for_dense(input):
     norm = BatchNormalization(axis=1)(input)
     return Activation('relu')(norm)
+
 
 def _top_network(input):
     raw_result = _bn_relu_for_dense(input)
@@ -198,6 +201,7 @@ def _top_network(input):
         raw_result = _bn_relu_for_dense(raw_result)
     output = Dense(units=2, activation='softmax', kernel_initializer='he_normal')(raw_result)
     return output
+
 
 class ResnetBuilder(object):
     @staticmethod
@@ -221,11 +225,11 @@ class ResnetBuilder(object):
         if K.image_dim_ordering() == 'tf':
             input_shape = (input_shape[1], input_shape[2], input_shape[0])
 
-        # Load function from str if needed.
+        # Create embedding from RGBD tensor
         block_fn = _get_block(block_fn)
 
-        input = Input(shape=input_shape)
-        conv1 = _conv_bn_relu(filters=64, kernel_size=(7, 7), strides=(2, 2))(input)
+        rgbd_input = Input(shape=input_shape)
+        conv1 = _conv_bn_relu(filters=64, kernel_size=(7, 7), strides=(2, 2))(rgbd_input)
         pool1 = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), padding="same")(conv1)
 
         block = pool1
@@ -234,21 +238,32 @@ class ResnetBuilder(object):
             block = _residual_block(block_fn, filters=filters, repetitions=r, is_first_layer=(i == 0))(block)
             filters *= 2
 
-        # Last activation
+        # Last activation and pooling layer
         block = _bn_relu(block)
-
-        # Classifier block
         block_shape = K.int_shape(block)
         pool2 = AveragePooling2D(pool_size=(block_shape[ROW_AXIS], block_shape[COL_AXIS]),
                                  strides=(1, 1))(block)
-        flatten1 = Flatten()(pool2)
+        rgbd_embed = Flatten()(pool2)
+
+        # Create embedding from goal vector usin 3 layer FC network
+        goal_input = Input(shape=(2,))
+        goal_fc1 = Dense(units=32, kernel_initializer='he_normal',
+                         activation='relu')(goal_input)
+        goal_fc2 = Dense(units=128, kernel_initializer='he_normal',
+                         activation='relu')(goal_fc1)
+        goal_embed = Dense(units=512, kernel_initializer='he_normal')(goal_fc2)
+
+        # Concat RGBD and goal embeddings together
+        embed_concat = concatenate([rgbd_embed, goal_embed])
+
+        # Classifier block
         last_activation = None
         if is_classification:
             last_activation = "softmax"
         dense = Dense(units=num_outputs, kernel_initializer="he_normal",
-                      activation=last_activation)(flatten1)
+                      activation=last_activation)(embed_concat)
 
-        model = Model(inputs=input, outputs=dense)
+        model = Model(inputs=[rgbd_input, goal_input], outputs=dense)
         return model
 
     @staticmethod
