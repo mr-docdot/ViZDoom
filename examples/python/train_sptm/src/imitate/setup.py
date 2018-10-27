@@ -34,7 +34,7 @@ def setup_training_paths(experiment_id):
     return logs_path, current_model_path
 
 
-def setup_game(wad):
+def setup_game_train(wad):
     game = vzd.DoomGame()
 
     # Use your config
@@ -43,11 +43,8 @@ def setup_game(wad):
     # Set Scenario to the new generated WAD
     game.set_doom_scenario_path(wad)
 
-    # Sets up game for spectator (you)
-    # game.add_game_args("+freelook 1")
-    # game.set_screen_resolution(vzd.ScreenResolution.RES_1280X960)
+    # Set game to run in headless mode
     game.set_window_visible(False)
-    # game.set_mode(vzd.Mode.SPECTATOR)
     game.set_render_hud(False)
 
     # Set cv2 friendly format.
@@ -79,15 +76,62 @@ def setup_game(wad):
     # This CVAR controls scale of rendered map (higher valuer means bigger zoom).
     game.add_game_args("+viz_am_scale 3")
 
-    # This CVAR shows the whole map centered (overrides am_followplayer and viz_am_scale).
-    # game.add_game_args("+viz_am_center 1")
+    game.add_game_args("+am_showthingsprites 3")
+    game.add_game_args("+am_cheat 1")
+    game.add_game_args("+sv_cheats 1")
 
-    # Map's colors can be changed using CVARs, full list is available here: https://zdoom.org/wiki/CVARs:Automap#am_backcolor
-    # game.add_game_args("+am_backcolor 000000")
+    game.init()
+    return game
+
+
+def setup_game_test(wad):
+    game = vzd.DoomGame()
+
+    # Use your config
+    game.load_config(DEFAULT_CONFIG)
+
+    # Set Scenario to the new generated WAD
+    game.set_doom_scenario_path(wad)
+
+    # Sets up game for spectator (you)
+    game.set_window_visible(True)
+    game.set_mode(vzd.Mode.PLAYER)
+    game.set_render_hud(False)
+
+    # Set cv2 friendly format.
+    game.set_screen_format(vzd.ScreenFormat.BGR24)
+
+    # Enables rendering of automap.
+    game.set_automap_buffer_enabled(True)
+    game.set_labels_buffer_enabled(True)
+    game.set_depth_buffer_enabled(True)
+
+    # All map's geometry and objects will be displayed.
+    game.set_automap_mode(vzd.AutomapMode.OBJECTS_WITH_SIZE)
+
+    game.add_available_game_variable(vzd.GameVariable.POSITION_X)
+    game.add_available_game_variable(vzd.GameVariable.POSITION_Y)
+    game.add_available_game_variable(vzd.GameVariable.POSITION_Z)
+
+    game.add_available_game_variable(vzd.GameVariable.ANGLE)
+    game.add_available_game_variable(vzd.GameVariable.PITCH)
+    game.add_available_game_variable(vzd.GameVariable.ROLL)
+
+    game.add_available_game_variable(vzd.GameVariable.VELOCITY_X)
+    game.add_available_game_variable(vzd.GameVariable.VELOCITY_Y)
+    game.add_available_game_variable(vzd.GameVariable.VELOCITY_Z)
+
+    # This CVAR can be used to make a map follow a player.
+    game.add_game_args("+am_followplayer 1")
+
+    # This CVAR controls scale of rendered map (higher valuer means bigger zoom).
+    game.add_game_args("+viz_am_scale 3")
 
     game.add_game_args("+am_showthingsprites 3")
     game.add_game_args("+am_cheat 1")
     game.add_game_args("+sv_cheats 1")
 
     game.init()
+    game.send_game_command("iddqd")
+
     return game

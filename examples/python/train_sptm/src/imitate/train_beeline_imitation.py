@@ -6,7 +6,7 @@ from keras.models import Sequential
 from keras.layers import Dense, Activation
 from os import listdir
 from os.path import isfile, join
-from setup import setup_game, setup_training_paths
+from setup import setup_game_train, setup_training_paths
 
 
 def get_sorted_wad_ids(wad_dir):
@@ -57,9 +57,9 @@ def data_generator(data_dir, wad_dir, batch_size):
     wad_ids = get_sorted_wad_ids(wad_dir)
     game_goals = np.zeros((len(wad_ids), ep_len, 2))
 
-    for wad_id in wad_ids[:5]:
+    for wad_id in wad_ids:
         wad_path = join(wad_dir, wad_template.format(wad_id))
-        game = setup_game(wad_path)
+        game = setup_game_train(wad_path)
         games.append(game)
         game_ids.append(wad_id)
 
@@ -111,7 +111,9 @@ def data_generator(data_dir, wad_dir, batch_size):
             batch_rgbd = np.concatenate((batch_frames, batch_depths), axis=3)
             batch_goal = goals[:, i, :]
 
+            # Predict only values in the action space (7, 8, 9)
             batch_target = actions[:, i, :]
+            batch_target = batch_target[:, 7:10]
             yield ([batch_rgbd, batch_goal], batch_target)
 
 
@@ -127,15 +129,17 @@ experiment_id = 'beeline'
 logs_path, current_model_path = setup_training_paths(experiment_id)
 
 # Build model
-model = resnet.ResnetBuilder.build_resnet_18((4, 240, 320), 21, False)
+model = resnet.ResnetBuilder.build_resnet_18((4, 240, 320), 3,
+                                             is_classification=True)
 adam = keras.optimizers.Adam(lr=1e-04, beta_1=0.9, beta_2=0.999, epsilon=1e-08,
                              decay=0.0)
-model.compile(loss='mean_squared_error', optimizer=adam, metrics=['accuracy'])
+model.compile(loss='binary_crossentropy', optimizer=adam,
+              metrics=['binary_accuracy'])
 callbacks_list = [keras.callbacks.TensorBoard(log_dir=logs_path,
                                               write_graph=False),
                   keras.callbacks.ModelCheckpoint(current_model_path,
                                                   period=100)]
 model.fit_generator(generator,
                     steps_per_epoch=100,
-                    epochs=10,
+                    epochs=2500,
                     callbacks=callbacks_list)

@@ -317,15 +317,15 @@ class ResnetBuilder(object):
         if NORMALIZATION_ON:
             first_branch = Lambda(lambda x: K.l2_normalize(x, axis=1))(first_branch)
             second_branch = Lambda(lambda x: K.l2_normalize(x, axis=1))(second_branch) 
-        
+
         raw_result = concatenate([first_branch, second_branch])
         output = _top_network(raw_result)
-        
+
         # raw_result = dot([first_branch, second_branch], axes=1)
         # result = Lambda(lambda x: (K.clip(x, 0.5, 1) - 0.5) * 2.0)(raw_result)
         # negated_result = Lambda(lambda x: 1 - x)(result)
         # output = concatenate([negated_result, result])
-        
+
         return Model(inputs=input, outputs=output)
 
     @staticmethod
@@ -343,4 +343,3 @@ class ResnetBuilder(object):
         prob_zero = Lambda(lambda x: 1.0 - x)(prob_one)
         output = concatenate([prob_zero, prob_one])
         return Model(inputs=input, outputs=output)
-
