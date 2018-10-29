@@ -4,3 +4,4 @@ data/exploration/*
 *.Suzuka
 experiments/trained_models/*
 *.tfevents*
+model*.h5

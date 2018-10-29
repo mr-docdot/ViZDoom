@@ -43,7 +43,7 @@ def get_advance_agent_state(game):
     return cur_frame, depth_buffer, angle, action
 
 
-def data_generator(data_dir, wad_dir, batch_size):
+def data_generator(data_dir, wad_dir, batch_size, history_size):
     '''PRE-PROCESSING'''
     # Declare hyper-parameters
     wad_template = 'gen_{}_size_regular_mons_none_steepness_none.wad'
@@ -94,6 +94,8 @@ def data_generator(data_dir, wad_dir, batch_size):
             # Sample num_steps actions from game and record state
             for step in range(num_steps):
                 current_time = game.get_episode_time()
+                data_idx = step + history_size
+
                 if not game.is_episode_finished():
                     frame, depth, angle, action = get_advance_agent_state(game)
                     frames[i][step] = frame
@@ -110,9 +112,16 @@ def data_generator(data_dir, wad_dir, batch_size):
 
         # Reshape output for batch
         for i in range(num_steps):
-            batch_frames = frames[:, i, :, :, :]
-            batch_depths = depths[:, i, :, :][:, :, :, np.newaxis]
-            batch_rgbd = np.concatenate((batch_frames, batch_depths), axis=3)
+            batch_rgbd_all = []
+
+            for j in reversed(range(history_size + 1)):
+                batch_frames = frames[:, i + j, :, :, :]
+                batch_depths = depths[:, i + j, :, :][:, :, :, np.newaxis]
+                batch_rgbd_all.append(batch_frames)
+                batch_rgbd_all.append(batch_depths)
+
+            batch_rgbd = np.concatenate(batch_rgbd_all, axis=3)
+            batch_goal = goals[:, i, :]
 
             batch_goals = goals[:, i, :]
             batch_angles = angles[:, i, :]
@@ -127,8 +136,9 @@ def data_generator(data_dir, wad_dir, batch_size):
 wad_dir = '../../data/maps/out/'
 data_dir = '../../data/exploration/'
 batch_size = 32
+history_size = 2
 
-generator = data_generator(data_dir, wad_dir, batch_size)
+generator = data_generator(data_dir, wad_dir, batch_size, history_size)
 i = 0
 
 # Setup directories to save logs and models
@@ -136,7 +146,7 @@ experiment_id = 'beeline'
 logs_path, current_model_path = setup_training_paths(experiment_id)
 
 # Build model
-model = resnet.ResnetBuilder.build_resnet_18((4, 240, 320), 3,
+model = resnet.ResnetBuilder.build_resnet_18((12, 240, 320), 3,
                                              is_classification=True)
 adam = keras.optimizers.Adam(lr=1e-04, beta_1=0.9, beta_2=0.999, epsilon=1e-08,
                              decay=0.0)
