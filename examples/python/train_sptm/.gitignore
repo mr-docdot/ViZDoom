@@ -2,3 +2,5 @@
 data/exploration/*
 .python-version
 *.Suzuka
+experiments/trained_models/*
+*.tfevents*

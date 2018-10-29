@@ -4,6 +4,7 @@ import resnet
 
 from keras.models import Sequential
 from keras.layers import Dense, Activation
+from keras.utils import multi_gpu_model
 from os import listdir
 from os.path import isfile, join
 from setup import setup_game_train, setup_training_paths
@@ -139,6 +140,15 @@ callbacks_list = [keras.callbacks.TensorBoard(log_dir=logs_path,
                                               write_graph=False),
                   keras.callbacks.ModelCheckpoint(current_model_path,
                                                   period=100)]
+
+# Run model on multiple GPUs if available
+try:
+    model = multi_gpu_model(model)
+    print("Training model on multiple GPUs")
+except ValueError:
+    print("Training model on single GPU")
+
+# Train model
 model.fit_generator(generator,
                     steps_per_epoch=100,
                     epochs=2500,

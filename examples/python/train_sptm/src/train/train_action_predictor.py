@@ -1,3 +1,4 @@
+# flake8: noqa
 from train_setup import *
 
 def data_generator():
