@@ -134,8 +134,6 @@ model = resnet.ResnetBuilder.build_resnet_18((4, 240, 320), 3,
                                              is_classification=True)
 adam = keras.optimizers.Adam(lr=1e-04, beta_1=0.9, beta_2=0.999, epsilon=1e-08,
                              decay=0.0)
-model.compile(loss='binary_crossentropy', optimizer=adam,
-              metrics=['binary_accuracy'])
 callbacks_list = [keras.callbacks.TensorBoard(log_dir=logs_path,
                                               write_graph=False),
                   keras.callbacks.ModelCheckpoint(current_model_path,
@@ -143,12 +141,14 @@ callbacks_list = [keras.callbacks.TensorBoard(log_dir=logs_path,
 
 # Run model on multiple GPUs if available
 try:
-    model = multi_gpu_model(model)
     print("Training model on multiple GPUs")
+    model = multi_gpu_model(model)
 except ValueError:
     print("Training model on single GPU")
 
 # Train model
+model.compile(loss='binary_crossentropy', optimizer=adam,
+              metrics=['binary_accuracy'])
 model.fit_generator(generator,
                     steps_per_epoch=100,
                     epochs=2500,
