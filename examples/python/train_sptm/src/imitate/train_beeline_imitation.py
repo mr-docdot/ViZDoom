@@ -115,7 +115,8 @@ def data_generator(data_dir, wad_dir, batch_size):
             # Predict only values in the action space (7, 8, 9)
             batch_target = actions[:, i, :]
             batch_target = batch_target[:, 7:10]
-            yield ([batch_rgbd, batch_goal], batch_target)
+            yield (batch_rgbd, batch_target)
+            # yield ([batch_rgbd, batch_goal], batch_target)
 
 
 wad_dir = '../../data/maps/out/'
