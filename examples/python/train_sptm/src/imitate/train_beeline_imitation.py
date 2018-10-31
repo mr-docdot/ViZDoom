@@ -1,9 +1,8 @@
 import keras.optimizers
 import numpy as np
 import resnet
+import vizdoom as vzd
 
-from keras.models import Sequential
-from keras.layers import Dense, Activation
 from keras.utils import multi_gpu_model
 from os import listdir
 from os.path import isfile, join
@@ -35,12 +34,13 @@ def get_advance_agent_state(game):
     # Read frame and depth map from game state
     cur_frame = state.screen_buffer
     depth_buffer = state.depth_buffer
+    angle = game.get_game_variable(vzd.GameVariable.ANGLE)
 
     # Get action corresponding to current frame
     game.advance_action()
     action = np.array(game.get_last_action())
 
-    return cur_frame, depth_buffer, action
+    return cur_frame, depth_buffer, angle, action
 
 
 def data_generator(data_dir, wad_dir, batch_size):
@@ -69,6 +69,7 @@ def data_generator(data_dir, wad_dir, batch_size):
         # Randomly sample batch_size number of games
         frames = np.zeros((batch_size, num_steps, 240, 320, 3))
         depths = np.zeros((batch_size, num_steps, 240, 320))
+        angles = np.zeros((batch_size, num_steps, 1))
         goals = np.zeros((batch_size, num_steps, 2))
         actions = np.zeros((batch_size, num_steps, 21))
 
@@ -94,14 +95,16 @@ def data_generator(data_dir, wad_dir, batch_size):
             for step in range(num_steps):
                 current_time = game.get_episode_time()
                 if not game.is_episode_finished():
-                    frame, depth, action = get_advance_agent_state(game)
+                    frame, depth, angle, action = get_advance_agent_state(game)
                     frames[i][step] = frame
                     depths[i][step] = depth
+                    angles[i][step] = angle
                     goals[i][step] = game_goals[idx][current_time - 1]
                     actions[i][step] = action
                 else:
                     frames[i][step] = frames[i][step - 1]
                     depths[i][step] = depths[i][step - 1]
+                    angles[i][step] = angles[i][step - 1]
                     goals[i][step] = goals[i][step - 1]
                     actions[i][step] = actions[i][step - 1]
 
@@ -110,12 +113,15 @@ def data_generator(data_dir, wad_dir, batch_size):
             batch_frames = frames[:, i, :, :, :]
             batch_depths = depths[:, i, :, :][:, :, :, np.newaxis]
             batch_rgbd = np.concatenate((batch_frames, batch_depths), axis=3)
-            batch_goal = goals[:, i, :]
+
+            batch_goals = goals[:, i, :]
+            batch_angles = angles[:, i, :]
+            batch_GAs = np.concatenate((batch_goals, batch_angles), axis=1)
 
             # Predict only values in the action space (7, 8, 9)
             batch_target = actions[:, i, :]
             batch_target = batch_target[:, 7:10]
-            yield ([batch_rgbd, batch_goal], batch_target)
+            yield ([batch_rgbd, batch_GAs], batch_target)
 
 
 wad_dir = '../../data/maps/out/'
@@ -141,8 +147,8 @@ callbacks_list = [keras.callbacks.TensorBoard(log_dir=logs_path,
 
 # Run model on multiple GPUs if available
 try:
-    print("Training model on multiple GPUs")
     model = multi_gpu_model(model)
+    print("Training model on multiple GPUs")
 except ValueError:
     print("Training model on single GPU")
 
