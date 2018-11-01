@@ -67,11 +67,11 @@ def data_generator(data_dir, wad_dir, batch_size, history_size):
     '''DATA SAMPLING'''
     while True:
         # Randomly sample batch_size number of games
-        frames = np.zeros((batch_size, num_steps, 240, 320, 3))
-        depths = np.zeros((batch_size, num_steps, 240, 320))
-        angles = np.zeros((batch_size, num_steps, 1))
-        goals = np.zeros((batch_size, num_steps, 2))
-        actions = np.zeros((batch_size, num_steps, 21))
+        frames = np.zeros((batch_size, history_size + num_steps, 240, 320, 3))
+        depths = np.zeros((batch_size, history_size + num_steps, 240, 320))
+        angles = np.zeros((batch_size, history_size + num_steps, 1))
+        goals = np.zeros((batch_size, history_size + num_steps, 2))
+        actions = np.zeros((batch_size, history_size + num_steps, 21))
 
         for i, idx in enumerate(np.random.randint(0, len(games), batch_size)): # NOQA
             game = games[idx]
@@ -98,21 +98,22 @@ def data_generator(data_dir, wad_dir, batch_size, history_size):
 
                 if not game.is_episode_finished():
                     frame, depth, angle, action = get_advance_agent_state(game)
-                    frames[i][step] = frame
-                    depths[i][step] = depth
-                    angles[i][step] = angle
-                    goals[i][step] = game_goals[idx][current_time - 1]
-                    actions[i][step] = action
+                    frames[i][data_idx] = frame
+                    depths[i][data_idx] = depth
+                    angles[i][data_idx] = angle
+                    goals[i][data_idx] = game_goals[idx][current_time - 1]
+                    actions[i][data_idx] = action
                 else:
-                    frames[i][step] = frames[i][step - 1]
-                    depths[i][step] = depths[i][step - 1]
-                    angles[i][step] = angles[i][step - 1]
-                    goals[i][step] = goals[i][step - 1]
-                    actions[i][step] = actions[i][step - 1]
+                    frames[i][data_idx] = frames[i][data_idx - 1]
+                    depths[i][data_idx] = depths[i][data_idx - 1]
+                    angles[i][data_idx] = angles[i][data_idx - 1]
+                    goals[i][data_idx] = goals[i][data_idx - 1]
+                    actions[i][data_idx] = actions[i][data_idx - 1]
 
         # Reshape output for batch
         for i in range(num_steps):
             batch_rgbd_all = []
+            batch_ga_all = []
 
             for j in reversed(range(history_size + 1)):
                 batch_frames = frames[:, i + j, :, :, :]
@@ -120,17 +121,18 @@ def data_generator(data_dir, wad_dir, batch_size, history_size):
                 batch_rgbd_all.append(batch_frames)
                 batch_rgbd_all.append(batch_depths)
 
-            batch_rgbd = np.concatenate(batch_rgbd_all, axis=3)
-            batch_goal = goals[:, i, :]
+                batch_goals = goals[:, i + j, :]
+                batch_angles = angles[:, i + j, :]
+                batch_ga_all.append(batch_goals)
+                batch_ga_all.append(batch_angles)
 
-            batch_goals = goals[:, i, :]
-            batch_angles = angles[:, i, :]
-            batch_GAs = np.concatenate((batch_goals, batch_angles), axis=1)
+            batch_rgbd = np.concatenate(batch_rgbd_all, axis=3)
+            batch_ga = np.concatenate(batch_ga_all, axis=1)
 
             # Predict only values in the action space (7, 8, 9)
             batch_target = actions[:, i, :]
             batch_target = batch_target[:, 7:10]
-            yield ([batch_rgbd, batch_GAs], batch_target)
+            yield ([batch_rgbd, batch_ga], batch_target)
 
 
 wad_dir = '../../data/maps/out/'

@@ -246,7 +246,7 @@ class ResnetBuilder(object):
         rgbd_embed = Flatten()(pool2)
 
         # Create embedding from goal vector usin 3 layer FC network
-        goal_input = Input(shape=(3,))
+        goal_input = Input(shape=(9,))
         goal_fc1 = Dense(units=32, kernel_initializer='he_normal',
                          activation='relu')(goal_input)
         goal_fc2 = Dense(units=128, kernel_initializer='he_normal',
@@ -259,7 +259,7 @@ class ResnetBuilder(object):
         # Classifier block
         last_activation = None
         if is_classification:
-            last_activation = "softmax"
+            last_activation = "sigmoid"
         dense = Dense(units=num_outputs, kernel_initializer="he_normal",
                       activation=last_activation)(embed_concat)
 
