@@ -259,7 +259,7 @@ class ResnetBuilder(object):
         # Classifier block
         last_activation = None
         if is_classification:
-            last_activation = "softmax"
+            last_activation = "sigmoid"
         dense = Dense(units=num_outputs, kernel_initializer="he_normal",
                       activation=last_activation)(embed_concat)
 
