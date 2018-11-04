@@ -150,11 +150,11 @@ def compute_goal(state, step, curr_goal, explored_goals):
         proj_y = player_y + math.sin(math.radians(player_angle)) * line_length * -1
         rel_goal = np.array([proj_x, proj_y])
 
-    return rel_goal
+    return curr_goal, rel_goal
 
 
 def test_scenario(model, wad_path):
-    num_steps = 100
+    num_steps = 4200
     history_size = 2
 
     # Setup game using WAD and LMP
@@ -182,8 +182,9 @@ def test_scenario(model, wad_path):
         angles[data_idx] = angle
 
         # Compute beeline goal
-        curr_goal = compute_goal(state, step, curr_goal, explored_goals)
-        goals[data_idx] = curr_goal
+        curr_goal, rel_goal = compute_goal(state, step, curr_goal, explored_goals)
+        goals[data_idx] = rel_goal
+        print(np.linalg.norm(rel_goal))
 
         # Build input for network
         batch_rgbd_all = []
@@ -204,14 +205,12 @@ def test_scenario(model, wad_path):
         batch_ga = np.concatenate(batch_ga_all, axis=0)[np.newaxis, :]
 
         # Compute and perform action
-        pred_action = model.predict_on_batch([batch_rgbd, batch_ga])[0]
+        pred_action = np.rint(model.predict_on_batch([batch_rgbd, batch_ga])[0])
         action = [0.0] * 21
         action[7] = pred_action[0]
         action[8] = pred_action[1]
         action[9] = pred_action[2]
         game.make_action(action)
-        print(pred_action)
-        print(curr_goal)
 
 
 model_path = '../../experiments/trained_models/model_angle_history_2500.h5'
