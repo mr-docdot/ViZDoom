@@ -4,7 +4,6 @@ import numpy as np
 import random
 import vizdoom as vzd
 
-from keras.metrics import binary_accuracy
 from keras.models import load_model
 from setup import setup_game_test
 
@@ -153,12 +152,19 @@ def compute_goal(state, step, curr_goal, explored_goals):
     return curr_goal, rel_goal
 
 
-def test_scenario(model, wad_path):
+def test_scenario(model, wad_path, vid_out_name=None):
     num_steps = 4200
     history_size = 2
 
     # Setup game using WAD and LMP
     game = setup_game_test(wad_path)
+
+    # Set up video if specified
+    vid_out = None
+    if vid_out_name is not None:
+        vid_out = cv2.VideoWriter(vid_out_name,
+                                  cv2.VideoWriter_fourcc(*'XVID'),
+                                  vzd.DEFAULT_TICRATE, (320, 240))
 
     # Declare state history matrices
     frames = np.zeros((history_size + num_steps, 240, 320, 3))
@@ -174,6 +180,10 @@ def test_scenario(model, wad_path):
         frame = state.screen_buffer
         depth = state.depth_buffer
         angle = game.get_game_variable(vzd.GameVariable.ANGLE)
+
+        # Write to video if specified
+        if vid_out:
+            vid_out.write(frame)
 
         # Record state
         data_idx = step + history_size
@@ -212,14 +222,16 @@ def test_scenario(model, wad_path):
         action[9] = pred_action[2]
         game.make_action(action)
 
+    # Finish writing video if specified
+    if vid_out:
+        vid_out.release()
+
 
 model_path = '../../experiments/trained_models/model_angle_history_2500.h5'
 test_wad_ids = [192, 194, 195, 196, 197, 199, 201, 202, 203, 204]
-test_lmp_id = 2
+wad_id = test_wad_ids[1]
+wad_path = '../../data/maps/out/gen_{}_size_regular_mons_none_steepness_none.wad'.format(wad_id) # NOQA
 
 model = load_model(model_path)
 
-for idx, wad_id in enumerate(test_wad_ids):
-    wad_path = '../../data/maps/out/gen_{}_size_regular_mons_none_steepness_none.wad'.format(wad_id) # NOQA
-    test_scenario(model, wad_path)
-    break
+test_scenario(model, wad_path, 'test.avi')

@@ -5,3 +5,4 @@ data/exploration/*
 experiments/trained_models/*
 *.tfevents*
 model*.h5
+*.avi
