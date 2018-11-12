@@ -1,0 +1,8 @@
+.vscode
+data/exploration/*
+.python-version
+*.Suzuka
+experiments/trained_models/*
+*.tfevents*
+model*.h5
+*.avi

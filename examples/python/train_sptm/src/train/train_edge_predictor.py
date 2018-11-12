@@ -1,3 +1,4 @@
+# flake8: noqa
 import vizdoom as vzd
 
 from os import listdir
