@@ -51,16 +51,16 @@ class Networks(object):
 
         return model
 
-    @staticmethod    
+    @staticmethod
     def actor_network(input_shape, action_size, learning_rate):
         """Actor Network for A2C
         """
 
         model = Sequential()
-        model.add(Convolution2D(32, 8, 8, subsample=(4,4), input_shape=(input_shape)))
+        model.add(Convolution2D(32, 8, 8, subsample=(4, 4), input_shape=(input_shape)))
         model.add(BatchNormalization())
         model.add(Activation('relu'))
-        model.add(Convolution2D(64, 4, 4, subsample=(2,2)))
+        model.add(Convolution2D(64, 4, 4, subsample=(2, 2)))
         model.add(BatchNormalization())
         model.add(Activation('relu'))
         model.add(Convolution2D(64, 3, 3))
@@ -76,20 +76,20 @@ class Networks(object):
         model.add(Dense(output_dim=action_size, activation='softmax'))
 
         adam = Adam(lr=learning_rate)
-        model.compile(loss='categorical_crossentropy',optimizer=adam)
+        model.compile(loss='categorical_crossentropy', optimizer=adam)
 
         return model
 
-    @staticmethod    
+    @staticmethod
     def critic_network(input_shape, value_size, learning_rate):
         """Critic Network for A2C
         """
 
         model = Sequential()
-        model.add(Convolution2D(32, 8, 8, subsample=(4,4), input_shape=(input_shape)))
+        model.add(Convolution2D(32, 8, 8, subsample=(4, 4), input_shape=(input_shape)))
         model.add(BatchNormalization())
         model.add(Activation('relu'))
-        model.add(Convolution2D(64, 4, 4, subsample=(2,2)))
+        model.add(Convolution2D(64, 4, 4, subsample=(2, 2)))
         model.add(BatchNormalization())
         model.add(Activation('relu'))
         model.add(Convolution2D(64, 3, 3))
@@ -105,11 +105,50 @@ class Networks(object):
         model.add(Dense(output_dim=value_size, activation='linear'))
 
         adam = Adam(lr=learning_rate)
-        model.compile(loss='mse',optimizer=adam)
+        model.compile(loss='mse', optimizer=adam)
 
         return model
 
-    @staticmethod    
+    @staticmethod
+    def actor_network_novis(input_shape, action_size, learning_rate):
+        """Actor Network for A2C
+        """
+        model = Sequential()
+        model.add(Flatten(input_shape=(input_shape)))
+        model.add(Dense(output_dim=32, kernel_initializer='he_normal'))
+        model.add(Activation('relu'))
+        model.add(Dense(output_dim=64, kernel_initializer='he_normal'))
+        model.add(Activation('relu'))
+        model.add(Dense(output_dim=128, kernel_initializer='he_normal'))
+        model.add(Activation('relu'))
+        model.add(Dense(output_dim=action_size, kernel_initializer='he_normal',
+                        activation='softmax'))
+
+        adam = Adam(lr=learning_rate)
+        model.compile(loss='categorical_crossentropy', optimizer=adam)
+        return model
+
+    @staticmethod
+    def critic_network_novis(input_shape, value_size, learning_rate):
+        """Critic Network for A2C
+        """
+        model = Sequential()
+        model.add(Flatten(input_shape=(input_shape)))
+        model.add(Dense(output_dim=32, kernel_initializer='he_normal'))
+        model.add(Activation('relu'))
+        model.add(Dense(output_dim=64, kernel_initializer='he_normal'))
+        model.add(Activation('relu'))
+        model.add(Dense(output_dim=128, kernel_initializer='he_normal'))
+        model.add(Activation('relu'))
+        model.add(Dense(output_dim=value_size, kernel_initializer='he_normal',
+                        activation='linear'))
+
+        adam = Adam(lr=learning_rate)
+        model.compile(loss='mse', optimizer=adam)
+
+        return model
+
+    @staticmethod
     def policy_reinforce(input_shape, action_size, learning_rate):
         """
         Model for REINFORCE

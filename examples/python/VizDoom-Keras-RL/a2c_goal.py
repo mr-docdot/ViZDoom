@@ -12,7 +12,7 @@ import time
 
 import json
 from keras.models import model_from_json
-from keras.models import Sequential, load_model, Model
+from keras.models import Sequential, Model
 from keras.layers.core import Dense, Dropout, Activation, Flatten
 from keras.layers import Convolution2D, Dense, Flatten, merge, MaxPooling2D, Input, AveragePooling2D, Lambda, Activation, Embedding
 from keras.optimizers import SGD, Adam, rmsprop
@@ -43,7 +43,7 @@ class A2CAgent:
         self.action_size = action_size
         self.value_size = 1
         self.observe = 0
-        self.frame_per_action = 4
+        self.frame_per_action = 2
 
         # These are hyper parameters for the Policy Gradient
         self.gamma = 0.99
@@ -61,8 +61,8 @@ class A2CAgent:
         self.stats_window_size = 50  # window size for computing rolling statistics
         self.mavg_score = []  # Moving Average of Survival Time
         self.var_score = []  # Variance of Survival Time
-        self.mavg_ammo_left = []  # Moving Average of Ammo used
-        self.mavg_kill_counts = []  # Moving Average of Kill Counts
+        self.mavg_num_steps = []  # Moving Average of Ammo used
+        self.mavg_min_dist = []  # Moving Average of Kill Counts
 
     # using the output of policy network, pick action stochastically (Stochastic Policy)
     def get_action(self, state):
@@ -123,18 +123,23 @@ class A2CAgent:
 
         return actor_loss.history['loss'], critic_loss.history['loss']
 
-    def shape_reward(self, r_t, misc, prev_misc, t):
-        # Check any kill count
-        if (misc[0] > prev_misc[0]):  # Kill monster
-            r_t = r_t + 1
+    def shape_reward(self, r_t, state, prev_state, min_dist, t):
+        goal_xy = np.array([1040, -352])
+        # prev_xy = np.array([prev_state.game_variables[0], prev_state.game_variables[1]])
+        cur_xy = np.array([state.game_variables[0], state.game_variables[1]])
 
-        if (misc[1] < prev_misc[1]):  # Use ammo
-            r_t = r_t - 0.1
+        # prev_dist = np.linalg.norm(goal_xy - prev_xy)
+        cur_dist = np.linalg.norm(goal_xy - cur_xy)
 
-        if (misc[2] < prev_misc[2]):  # Loss HEALTH
-            r_t = r_t - 0.1
+        if cur_dist < min_dist:
+            r_t = r_t + 0.0005
+            min_dist = cur_dist
 
-        return r_t
+        # Check if goal has been reached
+        if r_t > 0.5:
+            min_dist = 0
+
+        return r_t, min_dist
 
     def save_model(self, name):
         self.actor.save_weights(name + "_actor.h5", overwrite=True)
@@ -153,19 +158,17 @@ if __name__ == "__main__":
     K.set_session(sess)
 
     game = DoomGame()
-    game.load_config("../../../scenarios/defend_the_center.cfg")
+    game.load_config("../../../scenarios/my_way_home.cfg")
     game.set_sound_enabled(False)
     game.set_screen_resolution(ScreenResolution.RES_640X480)
     game.set_window_visible(True)
     game.init()
 
     # Maximum number of episodes
-    max_episodes = 1000000
+    max_episodes = 20000
 
     game.new_episode()
     game_state = game.get_state()
-    misc = game_state.game_variables  # [KILLCOUNT, AMMO, HEALTH]
-    prev_misc = misc
 
     action_size = game.get_available_buttons_size()
 
@@ -182,23 +185,22 @@ if __name__ == "__main__":
     # Start training
     GAME = 0
     t = 0
-    max_life = 0  # Maximum episode life (Proxy for agent performance)
 
     # Buffer to compute rolling statistics
-    life_buffer, ammo_buffer, kills_buffer = [], [], []
+    num_steps_buffer, min_dist_buffer = [], []
 
     for i in range(max_episodes):
         game.new_episode()
+        prev_state = game_state
         game_state = game.get_state()
-        misc = game_state.game_variables
-        prev_misc = misc
+        min_dist = 999999999
 
         x_t = game_state.screen_buffer  # 480 x 640
         x_t = preprocessImg(x_t, size=(img_rows, img_cols))
         s_t = np.stack(([x_t]*4), axis=2)  # It becomes 64x64x4
         s_t = np.expand_dims(s_t, axis=0)  # 1x64x64x4
 
-        life = 0  # Episode life
+        steps_taken = 0  # Episode life
 
         while not game.is_episode_finished():
             loss = 0  # Training Loss at each update
@@ -220,31 +222,28 @@ if __name__ == "__main__":
             game.advance_action(skiprate)
 
             r_t = game.get_last_reward()  # Each frame we get reward of 0.1, so 4 frames will be 0.4
+
             # Check if episode is terminated
             is_terminated = game.is_episode_finished()
-
-            if (is_terminated):
-                # Save max_life
-                if (life > max_life):
-                    max_life = life
-                life_buffer.append(life)
-                ammo_buffer.append(misc[1])
-                kills_buffer.append(misc[0])
-                print ("Episode Finish ", prev_misc, policy)
-            else:
-                life += 1
+            if not is_terminated:
+                steps_taken += 1
+                prev_state = game_state
                 game_state = game.get_state()  # Observe again after we take the action
-                misc = game_state.game_variables
 
             # Reward Shaping
-            r_t = agent.shape_reward(r_t, misc, prev_misc, t)
+            r_t, min_dist = agent.shape_reward(r_t, game_state, prev_state, min_dist, t)
+
+            # Record in buffer for statistics
+            if is_terminated:
+                num_steps_buffer.append(steps_taken)
+                min_dist_buffer.append(min_dist)
+                print ("Episode Finish ", policy)
 
             # Save trajactory sample <s, a, r> to the memory
             agent.append_sample(s_t, action_idx, r_t)
 
             # Update the cache
             t += 1
-            prev_misc = misc
 
             if (is_terminated and t > agent.observe):
                 # Every episode, agent learns from sample returns
@@ -253,7 +252,7 @@ if __name__ == "__main__":
             # Save model every 10000 iterations
             if t % 10000 == 0:
                 print("Save model")
-                agent.save_model("models/a2c")
+                agent.save_model("models/a2c_goal")
 
             state = ""
             if t <= agent.observe:
@@ -262,29 +261,22 @@ if __name__ == "__main__":
                 state = "Train mode"
 
             if (is_terminated):
-
                 # Print performance statistics at every episode end
-                print("TIME", t, "/ GAME", GAME, "/ STATE", state, "/ ACTION", action_idx, "/ REWARD", r_t, "/ LIFE", max_life, "/ LOSS", loss)
+                print("TIME", t, "/ GAME", GAME, "/ STATE", state, "/ ACTION", action_idx, "/ REWARD", r_t, "/ MIN_DIST", min_dist, "/ STEPS", steps_taken, "/ LOSS", loss)
 
                 # Save Agent's Performance Statistics
                 if GAME % agent.stats_window_size == 0 and t > agent.observe:
                     print("Update Rolling Statistics")
-                    agent.mavg_score.append(np.mean(np.array(life_buffer)))
-                    agent.var_score.append(np.var(np.array(life_buffer)))
-                    agent.mavg_ammo_left.append(np.mean(np.array(ammo_buffer)))
-                    agent.mavg_kill_counts.append(np.mean(np.array(kills_buffer)))
+                    agent.mavg_num_steps.append(np.mean(np.array(num_steps_buffer)))
+                    agent.mavg_min_dist.append(np.mean(np.array(min_dist_buffer)))
 
                     # Reset rolling stats buffer
-                    life_buffer, ammo_buffer, kills_buffer = [], [], []
+                    num_steps_buffer, min_dist_buffer = [], []
 
                     # Write Rolling Statistics to file
-                    with open("statistics/a2c_stats.txt", "w") as stats_file:
-                        stats_file.write('Game: ' + str(GAME) + '\n')
-                        stats_file.write('Max Score: ' + str(max_life) + '\n')
-                        stats_file.write('mavg_score: ' + str(agent.mavg_score) + '\n')
-                        stats_file.write('var_score: ' + str(agent.var_score) + '\n')
-                        stats_file.write('mavg_ammo_left: ' + str(agent.mavg_ammo_left) + '\n')
-                        stats_file.write('mavg_kill_counts: ' + str(agent.mavg_kill_counts) + '\n')
+                    with open("statistics/a2c_goal_stats.txt", "w") as stats_file:
+                        stats_file.write('mavg_num_steps: ' + str(agent.mavg_num_steps) + '\n')
+                        stats_file.write('mavg_min_dist: ' + str(agent.mavg_min_dist) + '\n')
 
         # Episode Finish. Increment game count
         GAME += 1
