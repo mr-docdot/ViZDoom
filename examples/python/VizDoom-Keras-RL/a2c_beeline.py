@@ -4,11 +4,8 @@ from __future__ import print_function
 import skimage as skimage
 from skimage import transform, color, exposure
 from skimage.viewer import ImageViewer
-import random
 from random import choice
 import numpy as np
-from collections import deque
-import time
 
 import json
 from keras.models import model_from_json
@@ -36,7 +33,6 @@ def preprocessImg(img, size):
 
 
 class A2CAgent:
-
     def __init__(self, state_size, action_size):
         # get size of state and action
         self.state_size = state_size
@@ -207,6 +203,10 @@ if __name__ == "__main__":
             loss = 0  # Training Loss at each update
             r_t = 0  # Initialize reward at time t
             a_t = np.zeros([action_size])  # Initialize action at time t
+
+            # TODO: Compute beeline goal here
+            # Probably should set a flag as to whether or not a new goal is needed
+            # Flag should be tripped when the goal is reached, possibly in the reward
 
             x_t = np.array(game_state.game_variables)
             x_t = x_t.reshape(1, 1, 3)
