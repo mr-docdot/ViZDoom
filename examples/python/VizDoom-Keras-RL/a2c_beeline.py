@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import print_function
 
+import beeline
 import skimage as skimage
 from skimage import transform, color, exposure
 from skimage.viewer import ImageViewer
@@ -191,6 +192,9 @@ if __name__ == "__main__":
         game_state = game.get_state()
         prev_state = game_state
 
+        cur_goal = None
+        explored_goals = {}
+        pick_new_goal = True
         min_dist = 999999999
 
         x_t = np.array(game_state.game_variables)  # [x, y, angle]
@@ -207,6 +211,10 @@ if __name__ == "__main__":
             # TODO: Compute beeline goal here
             # Probably should set a flag as to whether or not a new goal is needed
             # Flag should be tripped when the goal is reached, possibly in the reward
+            if pick_new_goal:
+                cur_goal = beeline.compute_goal(game_state, cur_goal,
+                                                explored_goals, pick_new_goal)
+                pick_new_goal = False
 
             x_t = np.array(game_state.game_variables)
             x_t = x_t.reshape(1, 1, 3)

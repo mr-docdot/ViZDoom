@@ -13,9 +13,9 @@ def compute_map(state, height=240, width=320,
     # Extract agent state from game
     depth_buffer = state.depth_buffer
 
-    player_x = state.game_variables[5]
-    player_y = state.game_variables[6]
-    player_angle = state.game_variables[8]
+    player_x = state.game_variables[0]
+    player_y = state.game_variables[1]
+    player_angle = state.game_variables[2]
 
     # Initialize maps
     canvas_size = 2*map_size + 1
@@ -117,13 +117,7 @@ def compute_map(state, height=240, width=320,
     return curr_goal
 
 
-def compute_goal(state, step, curr_goal, explored_goals):
-    # Determine if new goal should be picked
-    if step % 50 == 0:
-        pick_new_goal = True
-    else:
-        pick_new_goal = False
-
+def compute_goal(state, curr_goal, explored_goals, pick_new_goal):
     # Compute absolute position of goal
     curr_goal = compute_map(state,
                             pick_new_goal=pick_new_goal,
@@ -131,9 +125,9 @@ def compute_goal(state, step, curr_goal, explored_goals):
                             explored_goals=explored_goals)
 
     # Compute relative distance to goal
-    player_x = state.game_variables[5]
-    player_y = state.game_variables[6]
-    player_angle = state.game_variables[8]
+    player_x = state.game_variables[0]
+    player_y = state.game_variables[1]
+    player_angle = state.game_variables[2]
 
     if curr_goal is not None:
         diff_x = curr_goal[0] - player_x
