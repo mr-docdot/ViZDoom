@@ -118,26 +118,16 @@ class A2CAgent:
 
         return actor_loss.history['loss'], critic_loss.history['loss']
 
-    def shape_reward(self, r_t, state, prev_state, min_dist, t):
-        # goal_xy = np.array([1040, -352])
+    def shape_reward(self, r_t, state, prev_state, cur_goal, t):
         prev_xy = np.array([prev_state.game_variables[0], prev_state.game_variables[1]])
         cur_xy = np.array([state.game_variables[0], state.game_variables[1]])
+        dist = np.linalg.norm(cur_xy - cur_goal)
 
-        # prev_dist = np.linalg.norm(goal_xy - prev_xy)
-        # cur_dist = np.linalg.norm(goal_xy - cur_xy)
         if not cur_xy[1] - prev_xy[1] == 0:
             r_t = r_t + 0.1
             print('reward')
 
-        # if cur_dist < min_dist:
-        #     r_t = r_t + 0.0005
-        #     min_dist = cur_dist
-
-        # # Check if goal has been reached
-        # if r_t > 0.5:
-        #     min_dist = 0
-
-        return r_t, min_dist
+        return r_t, dist
 
     def save_model(self, name):
         self.actor.save_weights(name + "_actor.h5", overwrite=True)
@@ -185,7 +175,7 @@ if __name__ == "__main__":
     t = 0
 
     # Buffer to compute rolling statistics
-    num_goals_buffer, min_dist_buffer = [], []
+    num_goals_buffer = []
 
     for i in range(max_episodes):
         game.new_episode()
@@ -195,7 +185,6 @@ if __name__ == "__main__":
         cur_goal = None
         explored_goals = {}
         pick_new_goal = True
-        min_dist = 999999999
 
         x_t = np.array(game_state.game_variables)  # [x, y, angle]
         s_t = np.stack(([x_t]*4), axis=0)  # 4x3
@@ -208,9 +197,7 @@ if __name__ == "__main__":
             r_t = 0  # Initialize reward at time t
             a_t = np.zeros([action_size])  # Initialize action at time t
 
-            # TODO: Compute beeline goal here
-            # Probably should set a flag as to whether or not a new goal is needed
-            # Flag should be tripped when the goal is reached, possibly in the reward
+            # Compute new goal using beeline policy if necessary
             if pick_new_goal:
                 cur_goal = beeline.compute_goal(game_state, cur_goal,
                                                 explored_goals, pick_new_goal)
@@ -240,12 +227,13 @@ if __name__ == "__main__":
                 game_state = game.get_state()  # Observe again after we take the action
 
             # Reward Shaping
-            r_t, min_dist = agent.shape_reward(r_t, game_state, prev_state, min_dist, t)
+            r_t, dist = agent.shape_reward(r_t, game_state, prev_state, cur_goal, t)
+            if dist == 0:
+                pick_new_goal = True
 
             # Record in buffer for statistics
             if is_terminated:
                 num_goals_buffer.append(0)
-                min_dist_buffer.append(min_dist)
                 print ("Episode Finish ", policy)
 
             # Save trajactory sample <s, a, r> to the memory
@@ -278,7 +266,7 @@ if __name__ == "__main__":
                 if GAME % agent.stats_window_size == 0 and t > agent.observe:
                     print("Update Rolling Statistics")
                     agent.mavg_num_goals.append(np.mean(np.array(num_goals_buffer)))
-                    agent.mavg_min_dist.append(np.mean(np.array(min_dist_buffer)))
+                    # agent.mavg_min_dist.append(np.mean(np.array(min_dist_buffer)))
 
                     # Reset rolling stats buffer
                     num_steps_buffer, min_dist_buffer = [], []
