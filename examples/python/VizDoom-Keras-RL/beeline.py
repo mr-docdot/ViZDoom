@@ -5,11 +5,10 @@ import random
 import vizdoom as vzd
 
 
-def compute_map(state, height=240, width=320,
-                map_size=256, map_scale=3, fov=90.0,
-                beacon_scale=50, pick_new_goal=False,
-                only_visible_beacons=True, curr_goal=None,
-                explored_goals={}):
+def compute_new_goal(state, height=240, width=320,
+                     map_size=256, map_scale=3, fov=90.0,
+                     beacon_scale=50, only_visible_beacons=True,
+                     curr_goal=None, explored_goals={}):
     # Extract agent state from game
     depth_buffer = state.depth_buffer
 
@@ -101,28 +100,27 @@ def compute_map(state, height=240, width=320,
                            thickness=-1)
 
     # Pick new goal from unexplored visible beacons if required
-    if pick_new_goal:
-        unexplored_beacons = []
-        for b in visble_beacons_world:
-            if b not in explored_goals:
-                unexplored_beacons.append(b)
+    unexplored_beacons = []
+    for b in visble_beacons_world:
+        if b not in explored_goals:
+            unexplored_beacons.append(b)
 
-        if len(unexplored_beacons) > 0:
-            beacon_idx = random.randint(0, len(unexplored_beacons)-1)
-            curr_goal = unexplored_beacons[beacon_idx]
-            explored_goals[curr_goal] = True
-        else:
-            curr_goal = None
+    if len(unexplored_beacons) > 0:
+        beacon_idx = random.randint(0, len(unexplored_beacons)-1)
+        curr_goal = unexplored_beacons[beacon_idx]
+        explored_goals[curr_goal] = True
+    else:
+        curr_goal = None
 
     return curr_goal
 
 
 def compute_goal(state, curr_goal, explored_goals, pick_new_goal):
-    # Compute absolute position of goal
-    curr_goal = compute_map(state,
-                            pick_new_goal=pick_new_goal,
-                            curr_goal=curr_goal,
-                            explored_goals=explored_goals)
+    # Compute absolute position of goal if required
+    if pick_new_goal:
+        curr_goal = compute_new_goal(state,
+                                     curr_goal=curr_goal,
+                                     explored_goals=explored_goals)
 
     # Compute relative distance to goal
     player_x = state.game_variables[0]

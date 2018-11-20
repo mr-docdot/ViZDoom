@@ -40,7 +40,7 @@ class A2CAgent:
         self.action_size = action_size
         self.value_size = 1
         self.observe = 0
-        self.frame_per_action = 1
+        self.frame_per_action = 4
 
         # These are hyper parameters for the Policy Gradient
         self.gamma = 0.99
@@ -62,7 +62,7 @@ class A2CAgent:
     # using the output of policy network, pick action stochastically (Stochastic Policy)
     def get_action(self, state):
         policy = self.actor.predict(state).flatten()
-        print(policy)
+        # print(policy)
         return np.random.choice(self.action_size, 1, p=policy)[0], policy
 
     # Instead agent uses sample returns for evaluating policy
@@ -121,13 +121,19 @@ class A2CAgent:
     def shape_reward(self, r_t, state, prev_state, cur_goal, t):
         prev_xy = np.array([prev_state.game_variables[0], prev_state.game_variables[1]])
         cur_xy = np.array([state.game_variables[0], state.game_variables[1]])
-        dist = np.linalg.norm(cur_xy - cur_goal)
 
-        if not cur_xy[1] - prev_xy[1] == 0:
-            r_t = r_t + 0.1
-            print('reward')
+        prev_dist = np.linalg.norm(prev_xy - cur_goal)
+        cur_dist = np.linalg.norm(cur_xy - cur_goal)
 
-        return r_t, dist
+        if np.linalg.norm(cur_xy - prev_xy) > 0.5:
+            r_t = r_t + 5
+            # print('reward')
+
+        if cur_dist < prev_dist:
+            r_t = r_t + 500
+            # print('bigreward')
+
+        return r_t, cur_dist
 
     def save_model(self, name):
         self.actor.save_weights(name + "_actor.h5", overwrite=True)
@@ -182,11 +188,16 @@ if __name__ == "__main__":
         game_state = game.get_state()
         prev_state = game_state
 
-        cur_goal = None
+        # Compute initial goal
         explored_goals = {}
-        pick_new_goal = True
+        cur_goal, rel_goal = beeline.compute_goal(game_state, None,
+                                                  explored_goals, True)
+        pick_new_goal = False
 
+        # Compute initial RL state
         x_t = np.array(game_state.game_variables)  # [x, y, angle]
+        x_t[:2] = rel_goal  # [rel_goal_x, rel_goal_y, angle]
+
         s_t = np.stack(([x_t]*4), axis=0)  # 4x3
         s_t = np.expand_dims(s_t, axis=0)  # 1x4x3
 
@@ -198,18 +209,18 @@ if __name__ == "__main__":
             a_t = np.zeros([action_size])  # Initialize action at time t
 
             # Compute new goal using beeline policy if necessary
-            if pick_new_goal:
-                cur_goal = beeline.compute_goal(game_state, cur_goal,
-                                                explored_goals, pick_new_goal)
-                pick_new_goal = False
+            cur_goal, rel_goal = beeline.compute_goal(game_state, cur_goal,
+                                                      explored_goals, pick_new_goal)
+            pick_new_goal = False
 
-            x_t = np.array(game_state.game_variables)
+            x_t = np.array(game_state.game_variables)  # [x, y, angle]
+            x_t[:2] = rel_goal  # [rel_goal_x, rel_goal_y, angle]
             x_t = x_t.reshape(1, 1, 3)
             s_t = np.append(x_t, s_t[:, :3, :], axis=1)
 
             # Sample action from stochastic softmax policy
             action_idx, policy = agent.get_action(s_t)
-            # print(policy)
+            # print(s_t)
             a_t[action_idx] = 1
 
             a_t = a_t.astype(int)
@@ -260,7 +271,7 @@ if __name__ == "__main__":
 
             if (is_terminated):
                 # Print performance statistics at every episode end
-                print("TIME", t, "/ GAME", GAME, "/ STATE", state, "/ ACTION", action_idx, "/ REWARD", r_t, "/ MIN_DIST", min_dist, "/ STEPS", steps_taken, "/ LOSS", loss)
+                print("TIME", t, "/ GAME", GAME, "/ STATE", state, "/ ACTION", action_idx, "/ REWARD", r_t, "/ STEPS", steps_taken, "/ LOSS", loss)
 
                 # Save Agent's Performance Statistics
                 if GAME % agent.stats_window_size == 0 and t > agent.observe:
