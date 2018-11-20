@@ -87,6 +87,7 @@ class A2CAgent:
     def train_model(self):
         episode_length = len(self.states)
         discounted_rewards = self.discount_rewards(self.rewards)
+
         # Standardized discounted rewards
         discounted_rewards -= np.mean(discounted_rewards)
         if np.std(discounted_rewards):
@@ -125,13 +126,20 @@ class A2CAgent:
         prev_dist = np.linalg.norm(prev_xy - cur_goal)
         cur_dist = np.linalg.norm(cur_xy - cur_goal)
 
-        if np.linalg.norm(cur_xy - prev_xy) > 0.5:
-            r_t = r_t + 5
+        if np.linalg.norm(cur_xy - prev_xy) > 1:
+            r_t = r_t + 1
             # print('reward')
 
         if cur_dist < prev_dist:
-            r_t = r_t + 500
-            # print('bigreward')
+            r_t = r_t + 100
+            print('bigreward', cur_dist)
+
+        if cur_dist > prev_dist:
+            r_t = r_t - 10
+            print('bigbadreward', cur_dist)
+
+        if cur_dist < 1:
+            r_t = r_t + 500000
 
         return r_t, cur_dist
 
@@ -255,6 +263,7 @@ if __name__ == "__main__":
 
             if (is_terminated and t > agent.observe):
                 # Every episode, agent learns from sample returns
+                avg_reward = np.mean(np.array(agent.rewards))
                 loss = agent.train_model()
                 print(loss)
 
@@ -271,7 +280,7 @@ if __name__ == "__main__":
 
             if (is_terminated):
                 # Print performance statistics at every episode end
-                print("TIME", t, "/ GAME", GAME, "/ STATE", state, "/ ACTION", action_idx, "/ REWARD", r_t, "/ STEPS", steps_taken, "/ LOSS", loss)
+                print("TIME", t, "/ GAME", GAME, "/ STATE", state, "/ ACTION", action_idx, "/ REWARD", avg_reward, "/ STEPS", steps_taken, "/ LOSS", loss)
 
                 # Save Agent's Performance Statistics
                 if GAME % agent.stats_window_size == 0 and t > agent.observe:
