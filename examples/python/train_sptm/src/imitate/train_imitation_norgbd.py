@@ -113,7 +113,6 @@ def data_generator(data_dir, wad_dir, batch_size, history_size):
                 batch_ga_all.append(batch_angles)
 
             batch_ga = np.concatenate(batch_ga_all, axis=1)
-            print(batch_ga.shape)
 
             # Predict only values in the action space (7, 8, 9)
             batch_target = actions[:, i, :]

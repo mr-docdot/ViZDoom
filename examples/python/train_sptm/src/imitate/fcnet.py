@@ -31,7 +31,7 @@ def FCNet(input_shape, action_size):
 
     # Classifier block
     dense = Dense(units=action_size, kernel_initializer="he_normal",
-                  activation="softmax")(ga_embed)
+                  activation="sigmoid")(ga_embed)
 
     model = Model(inputs=ga_input, outputs=dense)
     return model

@@ -117,12 +117,12 @@ class Networks(object):
         model.add(Flatten(input_shape=(input_shape)))
         model.add(Dense(output_dim=32, kernel_initializer='he_normal'))
         model.add(Activation('relu'))
-        model.add(Dense(output_dim=64, kernel_initializer='he_normal'))
-        model.add(Activation('relu'))
         model.add(Dense(output_dim=128, kernel_initializer='he_normal'))
         model.add(Activation('relu'))
+        model.add(Dense(output_dim=512, kernel_initializer='he_normal'))
+        model.add(Activation('relu'))
         model.add(Dense(output_dim=action_size, kernel_initializer='he_normal',
-                        activation='softmax'))
+                        activation='sigmoid'))
 
         adam = Adam(lr=learning_rate)
         model.compile(loss='categorical_crossentropy', optimizer=adam)
@@ -136,9 +136,9 @@ class Networks(object):
         model.add(Flatten(input_shape=(input_shape)))
         model.add(Dense(output_dim=32, kernel_initializer='he_normal'))
         model.add(Activation('relu'))
-        model.add(Dense(output_dim=64, kernel_initializer='he_normal'))
-        model.add(Activation('relu'))
         model.add(Dense(output_dim=128, kernel_initializer='he_normal'))
+        model.add(Activation('relu'))
+        model.add(Dense(output_dim=512, kernel_initializer='he_normal'))
         model.add(Activation('relu'))
         model.add(Dense(output_dim=value_size, kernel_initializer='he_normal',
                         activation='linear'))
