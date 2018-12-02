@@ -4,7 +4,7 @@ import fcnet
 import resnet
 import vizdoom as vzd
 
-from keras.utils import multi_gpu_model
+from keras.utils import multi_gpu_model, to_categorical
 from os import listdir
 from os.path import isfile, join
 from setup import setup_game_train, setup_training_paths
@@ -17,6 +17,10 @@ def get_sorted_wad_ids(wad_dir):
     wad_ids.sort()
 
     return wad_ids
+
+
+def binary2int(x):
+    return x.dot(1 << np.arange(x.shape[-1] - 1, -1, -1))
 
 
 def set_random_lmp(game, wad_id, lmp_dir, num_saved_eps):
@@ -48,7 +52,6 @@ def data_generator(data_dir, wad_dir, batch_size, history_size):
     ep_len = 4200
     num_saved_eps = 5
     num_steps = 100
-    actions = [[0, 1, 0], [1, 0, 0], [1, 1, 0], [1, 0, 1]]
 
     # Set up games for each wad file
     games = []
@@ -117,6 +120,11 @@ def data_generator(data_dir, wad_dir, batch_size, history_size):
             # Predict only values in the action space (7, 8, 9)
             batch_target = actions[:, i, :]
             batch_target = batch_target[:, 7:10]
+
+            # Convert binary targets to one hot vector of int value
+            batch_target = binary2int(batch_target.astype(int))
+            batch_target = to_categorical(batch_target, num_classes=8)
+
             yield (batch_ga, batch_target)
 
 
@@ -133,7 +141,7 @@ experiment_id = 'imitation_norgbd'
 logs_path, current_model_path = setup_training_paths(experiment_id)
 
 # Build model
-model = fcnet.FCNet((12,), 3)
+model = fcnet.FCNet((12,), 8)
 # model = resnet.ResnetBuilder.build_resnet_18((12, 240, 320), 3,
 #                                              is_classification=True)
 adam = keras.optimizers.Adam(lr=1e-04, beta_1=0.9, beta_2=0.999, epsilon=1e-08,
@@ -151,8 +159,8 @@ except ValueError:
     print("Training model on single GPU")
 
 # Train model
-model.compile(loss='binary_crossentropy', optimizer=adam,
-              metrics=['binary_accuracy'])
+model.compile(loss='categorical_crossentropy', optimizer=adam,
+              metrics=['categorical_accuracy'])
 model.fit_generator(generator,
                     steps_per_epoch=100,
                     epochs=2500,
@@ -161,3 +169,5 @@ model.fit_generator(generator,
 # for data in generator:
 #     target = data[1]
 #     print(target)
+#     print(target.shape)
+#     continue
