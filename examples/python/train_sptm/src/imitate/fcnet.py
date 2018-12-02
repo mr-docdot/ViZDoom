@@ -27,7 +27,8 @@ def FCNet(input_shape, action_size):
                    activation='relu')(ga_input)
     ga_fc2 = Dense(units=128, kernel_initializer='he_normal',
                    activation='relu')(ga_fc1)
-    ga_embed = Dense(units=512, kernel_initializer='he_normal')(ga_fc2)
+    ga_embed = Dense(units=512, kernel_initializer='he_normal',
+                     activation='relu')(ga_fc2)
 
     # Classifier block
     dense = Dense(units=action_size, kernel_initializer="he_normal",

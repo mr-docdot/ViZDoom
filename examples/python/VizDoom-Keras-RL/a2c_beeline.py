@@ -61,9 +61,13 @@ class A2CAgent:
 
     # using the output of policy network, pick action stochastically (Stochastic Policy)
     def get_action(self, state):
-        policy = self.actor.predict(state).flatten()
-        # print(policy)
-        return np.random.choice(self.action_size, 1, p=policy)[0], policy
+        flattened_state = state.flatten().reshape(1, -1)
+        policy = self.actor.predict(flattened_state).flatten()
+
+        action_idx = np.random.choice(self.action_size, 1, p=policy)[0]
+        action = [int(x) for x in list('{0:03b}'.format(action_idx))]
+
+        return action, action_idx, policy
 
     # Instead agent uses sample returns for evaluating policy
     # Use TD(1) i.e. Monte Carlo updates
@@ -104,6 +108,7 @@ class A2CAgent:
             update_inputs[i, :, :] = self.states[i]
 
         # Prediction of state values for each state appears in the episode
+        update_inputs = update_inputs.reshape(-1, 12)
         values = self.critic.predict(update_inputs)
 
         # Similar to one-hot target but the "1" is replaced by Advantage Function i.e. discounted_rewards R_t - Value
@@ -111,9 +116,9 @@ class A2CAgent:
 
         for i in range(episode_length):
             advantages[i][self.actions[i]] = discounted_rewards[i] - values[i]
-        print(advantages)
-        actor_loss = self.actor.fit(update_inputs, advantages, nb_epoch=1, verbose=0)
-        critic_loss = self.critic.fit(update_inputs, discounted_rewards, nb_epoch=1, verbose=0)
+
+        actor_loss = self.actor.fit(update_inputs, advantages, epochs=1, verbose=0)
+        critic_loss = self.critic.fit(update_inputs, discounted_rewards, epochs=1, verbose=0)
 
         self.states, self.actions, self.rewards = [], [], []
 
@@ -132,13 +137,13 @@ class A2CAgent:
 
         if cur_dist < prev_dist:
             r_t = r_t + 100
-            print('bigreward', cur_dist)
+            # print('bigreward', cur_dist)
 
         if cur_dist > prev_dist:
-            r_t = r_t - 10
-            print('bigbadreward', cur_dist)
+            r_t = r_t - 150
+            # print('bigbadreward', cur_dist)
 
-        if cur_dist < 1:
+        if cur_dist < 50:
             r_t = r_t + 500000
 
         return r_t, cur_dist
@@ -176,13 +181,13 @@ if __name__ == "__main__":
     max_episodes = 20000
     game.new_episode()
     game_state = game.get_state()
-    action_size = game.get_available_buttons_size()
+    action_size = 8
 
     # Set up actor and critic networks
     state_size = (4, 3)
     agent = A2CAgent(state_size, action_size)
-    agent.actor = Networks.actor_network_novis(state_size, action_size, agent.actor_lr)
-    agent.critic = Networks.critic_network_novis(state_size, agent.value_size, agent.critic_lr)
+    agent.actor = Networks.actor_network_novis((12,), action_size, agent.actor_lr)
+    agent.critic = Networks.critic_network_novis((12,), agent.value_size, agent.critic_lr)
 
     # Start training
     GAME = 0
@@ -227,12 +232,10 @@ if __name__ == "__main__":
             s_t = np.append(x_t, s_t[:, :3, :], axis=1)
 
             # Sample action from stochastic softmax policy
-            action_idx, policy = agent.get_action(s_t)
-            # print(s_t)
-            a_t[action_idx] = 1
+            action, action_idx, policy = agent.get_action(s_t)
+            a_t = action
 
-            a_t = a_t.astype(int)
-            game.set_action(a_t.tolist())
+            game.set_action(a_t)
             skiprate = agent.frame_per_action
             game.advance_action(skiprate)
 
@@ -265,7 +268,7 @@ if __name__ == "__main__":
                 # Every episode, agent learns from sample returns
                 avg_reward = np.mean(np.array(agent.rewards))
                 loss = agent.train_model()
-                print(loss)
+                # print(loss)
 
             # Save model every 10000 iterations
             if t % 10000 == 0:
