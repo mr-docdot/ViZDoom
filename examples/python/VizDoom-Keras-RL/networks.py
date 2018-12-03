@@ -110,25 +110,6 @@ class Networks(object):
         return model
 
     @staticmethod
-    def actor_network_novis_old(input_shape, action_size, learning_rate):
-        """Actor Network for A2C
-        """
-        model = Sequential()
-        model.add(Flatten(input_shape=(input_shape)))
-        model.add(Dense(output_dim=32, kernel_initializer='he_normal'))
-        model.add(Activation('relu'))
-        model.add(Dense(output_dim=128, kernel_initializer='he_normal'))
-        model.add(Activation('relu'))
-        model.add(Dense(output_dim=512, kernel_initializer='he_normal'))
-        model.add(Activation('relu'))
-        model.add(Dense(output_dim=action_size, kernel_initializer='he_normal',
-                        activation='softmax'))
-
-        adam = Adam(lr=learning_rate)
-        model.compile(loss='categorical_crossentropy', optimizer=adam)
-        return model
-
-    @staticmethod
     def actor_network_novis(input_shape, action_size, learning_rate):
         """Actor Network for A2C
         """
@@ -138,7 +119,8 @@ class Networks(object):
                        activation='relu')(ga_input)
         ga_fc2 = Dense(units=128, kernel_initializer='he_normal',
                        activation='relu')(ga_fc1)
-        ga_embed = Dense(units=512, kernel_initializer='he_normal')(ga_fc2)
+        ga_embed = Dense(units=512, kernel_initializer='he_normal',
+                         activation='relu')(ga_fc2)
 
         # Classifier block
         dense = Dense(units=action_size, kernel_initializer="he_normal",
@@ -156,26 +138,6 @@ class Networks(object):
         """Critic Network for A2C
         """
         model = Sequential()
-        model.add(Dense(output_dim=32, kernel_initializer='he_normal'))
-        model.add(Activation('relu'))
-        model.add(Dense(output_dim=128, kernel_initializer='he_normal'))
-        model.add(Activation('relu'))
-        model.add(Dense(output_dim=512, kernel_initializer='he_normal'))
-        model.add(Activation('relu'))
-        model.add(Dense(output_dim=value_size, kernel_initializer='he_normal',
-                        activation='linear'))
-
-        adam = Adam(lr=learning_rate)
-        model.compile(loss='mse', optimizer=adam)
-
-        return model
-
-    @staticmethod
-    def critic_network_novis_old(input_shape, value_size, learning_rate):
-        """Critic Network for A2C
-        """
-        model = Sequential()
-        model.add(Flatten(input_shape=(input_shape)))
         model.add(Dense(output_dim=32, kernel_initializer='he_normal'))
         model.add(Activation('relu'))
         model.add(Dense(output_dim=128, kernel_initializer='he_normal'))

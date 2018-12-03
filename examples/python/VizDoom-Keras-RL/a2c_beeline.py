@@ -2,27 +2,23 @@
 from __future__ import print_function
 
 import beeline
-import skimage as skimage
-from skimage import transform, color, exposure
-from skimage.viewer import ImageViewer
-from random import choice
 import numpy as np
-
-import json
-from keras.models import model_from_json
-from keras.models import Sequential, Model
-from keras.layers.core import Dense, Dropout, Activation, Flatten
-from keras.layers import Convolution2D, Dense, Flatten, merge, MaxPooling2D, Input, AveragePooling2D, Lambda, Activation, Embedding
-from keras.optimizers import SGD, Adam, rmsprop
-from keras import backend as K
-
-from vizdoom import DoomGame, ScreenResolution
-from vizdoom import *
-import itertools as it
-from time import sleep
+import random
+import skimage as skimage
 import tensorflow as tf
 
+from keras import backend as K
+from keras.layers.core import Dense, Activation, Flatten
+from keras.layers import Convolution2D, Dense, Flatten, merge, MaxPooling2D, Input, AveragePooling2D, Lambda, Activation, Embedding
+from keras.models import load_model
 from networks import Networks
+from os import listdir
+from os.path import isfile, join
+from random import choice
+from skimage import transform, color, exposure
+from skimage.viewer import ImageViewer
+from vizdoom import DoomGame, ScreenResolution
+from vizdoom import *
 
 
 def preprocessImg(img, size):
@@ -31,6 +27,35 @@ def preprocessImg(img, size):
     img = skimage.color.rgb2gray(img)
 
     return img
+
+
+def get_sorted_wad_ids(wad_dir):
+    all_files = [f for f in listdir(wad_dir) if isfile(join(wad_dir, f))]
+    wad_files = [f for f in all_files if f.endswith('wad')]
+    wad_ids = [int(f.split('_')[1]) for f in wad_files]
+    wad_ids.sort()
+
+    return wad_ids
+
+
+def setup_random_game():
+    # Set up VizDoom Game
+    game = DoomGame()
+    game.load_config("./beeline.cfg")
+    game.set_sound_enabled(False)
+    game.set_screen_resolution(ScreenResolution.RES_640X480)
+    game.set_window_visible(True)
+
+    # Load generated map from WAD
+    wad_dir = '../train_sptm/data/maps/out/'
+    wad_ids = get_sorted_wad_ids(wad_dir)
+    wad_id = random.choice(wad_ids)
+    wad_path = '../train_sptm/data/maps/out/gen_{}_size_regular_mons_none_steepness_none.wad'.format(wad_id) # NOQA
+    game.set_doom_scenario_path(wad_path)
+    game.init()
+    game.new_episode()
+
+    return game
 
 
 class A2CAgent:
@@ -143,7 +168,7 @@ class A2CAgent:
             r_t = r_t - 150
             # print('bigbadreward', cur_dist)
 
-        if cur_dist < 50:
+        if cur_dist < 10:
             r_t = r_t + 500000
 
         return r_t, cur_dist
@@ -164,29 +189,32 @@ if __name__ == "__main__":
     sess = tf.Session(config=config)
     K.set_session(sess)
 
-    # Set up VizDoom Game
-    game = DoomGame()
-    game.load_config("./beeline.cfg")
-    game.set_sound_enabled(False)
-    game.set_screen_resolution(ScreenResolution.RES_640X480)
-    game.set_window_visible(True)
+    # # Set up VizDoom Game
+    # game = DoomGame()
+    # game.load_config("./beeline.cfg")
+    # game.set_sound_enabled(False)
+    # game.set_screen_resolution(ScreenResolution.RES_640X480)
+    # game.set_window_visible(True)
 
-    # Load generated map from WAD
-    wad_id = 194
-    wad_path = '../train_sptm/data/maps/out/gen_{}_size_regular_mons_none_steepness_none.wad'.format(wad_id) # NOQA
-    game.set_doom_scenario_path(wad_path)
-    game.init()
+    # # Load generated map from WAD
+    # wad_id = 194
+    # wad_path = '../train_sptm/data/maps/out/gen_{}_size_regular_mons_none_steepness_none.wad'.format(wad_id) # NOQA
+    # game.set_doom_scenario_path(wad_path)
+    # game.init()
+    # game.new_episode()
+    # game_state = game.get_state()
+    # Initialize VizDoom game
+    game = setup_random_game()
 
     # Maximum number of episodes
     max_episodes = 20000
-    game.new_episode()
-    game_state = game.get_state()
     action_size = 8
 
     # Set up actor and critic networks
     state_size = (4, 3)
     agent = A2CAgent(state_size, action_size)
-    agent.actor = Networks.actor_network_novis((12,), action_size, agent.actor_lr)
+    # agent.actor = Networks.actor_network_novis((12,), action_size, agent.actor_lr)
+    agent.actor = load_model('./models/model_norgbd_softmax.2500.h5')
     agent.critic = Networks.critic_network_novis((12,), agent.value_size, agent.critic_lr)
 
     # Start training
@@ -197,6 +225,7 @@ if __name__ == "__main__":
     num_goals_buffer = []
 
     for i in range(max_episodes):
+        game = setup_random_game()
         game.new_episode()
         game_state = game.get_state()
         prev_state = game_state
