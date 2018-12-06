@@ -182,9 +182,27 @@ class Networks(object):
 
         return model
 
-    @staticmethod    
-    def dqn(input_shape, action_size, learning_rate):
+    @staticmethod
+    def dqn_novis(input_shape, action_size, learning_rate):
+        # Create embedding from goal vector using 3 layer FC network
+        ga_input = Input(shape=input_shape)
+        ga_flatten = Flatten(ga_input)
+        ga_fc1 = Dense(units=32, activation='relu')(ga_flatten)
+        ga_fc2 = Dense(units=128, activation='relu')(ga_fc1)
+        ga_embed = Dense(units=512, activation='relu')(ga_fc2)
 
+        # Classifier block
+        dense = Dense(units=action_size, activation="linear")(ga_embed)
+
+        # Compile model with optimizer
+        model = Model(inputs=ga_input, outputs=dense)
+        adam = Adam(lr=learning_rate)
+        model.compile(loss='mse', optimizer=adam)
+
+        return model
+
+    @staticmethod
+    def dqn(input_shape, action_size, learning_rate):
         model = Sequential()
         model.add(Convolution2D(32, 8, 8, subsample=(4,4), activation='relu', input_shape=(input_shape)))
         model.add(Convolution2D(64, 4, 4, subsample=(2,2), activation='relu'))
@@ -194,7 +212,7 @@ class Networks(object):
         model.add(Dense(output_dim=action_size, activation='linear'))
 
         adam = Adam(lr=learning_rate)
-        model.compile(loss='mse',optimizer=adam)
+        model.compile(loss='mse', optimizer=adam)
 
         return model
 
