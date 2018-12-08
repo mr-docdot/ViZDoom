@@ -34,7 +34,7 @@ def preprocessImg(img, size):
     img = skimage.color.rgb2gray(img)
 
     return img
-    
+
 
 class DoubleDQNAgent:
 
@@ -52,9 +52,9 @@ class DoubleDQNAgent:
         self.final_epsilon = 0.0001
         self.batch_size = 32
         self.observe = 5000
-        self.explore = 50000 
+        self.explore = 50000
         self.frame_per_action = 4
-        self.update_target_freq = 3000 
+        self.update_target_freq = 3000
         self.timestep_per_train = 100 # Number of timesteps between training interval
 
         # create replay memory using deque
@@ -66,7 +66,7 @@ class DoubleDQNAgent:
         self.target_model = None
 
         # Performance Statistics
-        self.stats_window_size= 50 # window size for computing rolling statistics
+        self.stats_window_size = 50 # window size for computing rolling statistics
         self.mavg_score = [] # Moving Average of Survival Time
         self.var_score = [] # Variance of Survival Time
         self.mavg_ammo_left = [] # Moving Average of Ammo used
@@ -102,7 +102,7 @@ class DoubleDQNAgent:
 
         return r_t
 
-    # Save trajectory sample <s,a,r,s'> to the replay memory
+    # Save trajectory sample <s,a,r,s', t> to the replay memory
     def replay_memory(self, s_t, action_idx, r_t, s_t1, is_terminated, t):
         self.memory.append((s_t, action_idx, r_t, s_t1, is_terminated))
         if self.epsilon > self.final_epsilon and t > self.observe:
@@ -159,7 +159,6 @@ class DoubleDQNAgent:
 
     # Pick samples randomly from replay memory (with batch_size)
     def train_replay(self):
-
         num_samples = min(self.batch_size * self.timestep_per_train, len(self.memory))
         replay_samples = random.sample(self.memory, num_samples)
 
@@ -213,9 +212,9 @@ if __name__ == "__main__":
 
     game = DoomGame()
     game.load_config("../../../scenarios/defend_the_center.cfg")
-    game.set_sound_enabled(True)
+    game.set_sound_enabled(False)
     game.set_screen_resolution(ScreenResolution.RES_640X480)
-    game.set_window_visible(False)
+    game.set_window_visible(True)
     game.init()
 
     game.new_episode()
@@ -225,9 +224,9 @@ if __name__ == "__main__":
 
     action_size = game.get_available_buttons_size()
 
-    img_rows , img_cols = 64, 64
+    img_rows, img_cols = 64, 64
     # Convert image into Black and white
-    img_channels = 4 # We stack 4 frames
+    img_channels = 4  # We stack 4 frames
 
     state_size = (img_rows, img_cols, img_channels)
     agent = DoubleDQNAgent(state_size, action_size)
@@ -235,10 +234,10 @@ if __name__ == "__main__":
     agent.model = Networks.dqn(state_size, action_size, agent.learning_rate)
     agent.target_model = Networks.dqn(state_size, action_size, agent.learning_rate)
 
-    x_t = game_state.screen_buffer # 480 x 640
+    x_t = game_state.screen_buffer  # 480 x 640
     x_t = preprocessImg(x_t, size=(img_rows, img_cols))
-    s_t = np.stack(([x_t]*4), axis=2) # It becomes 64x64x4
-    s_t = np.expand_dims(s_t, axis=0) # 1x64x64x4
+    s_t = np.stack(([x_t]*4), axis=2)  # It becomes 64x64x4
+    s_t = np.expand_dims(s_t, axis=0)  # 1x64x64x4
 
     is_terminated = game.is_episode_finished()
 
@@ -246,7 +245,7 @@ if __name__ == "__main__":
     epsilon = agent.initial_epsilon
     GAME = 0
     t = 0
-    max_life = 0 # Maximum episode life (Proxy for agent performance)
+    max_life = 0  # Maximum episode life (Proxy for agent performance)
     life = 0
 
     # Buffer to compute rolling statistics 
@@ -260,7 +259,7 @@ if __name__ == "__main__":
         a_t = np.zeros([action_size])
 
         # Epsilon Greedy
-        action_idx  = agent.get_action(s_t)
+        action_idx = agent.get_action(s_t)
         a_t[action_idx] = 1
 
         a_t = a_t.astype(int)
@@ -309,7 +308,7 @@ if __name__ == "__main__":
         # Do the training
         if t > agent.observe and t % agent.timestep_per_train == 0:
             Q_max, loss = agent.train_replay()
-            
+
         s_t = s_t1
         t += 1
 
@@ -328,12 +327,12 @@ if __name__ == "__main__":
             state = "train"
 
         if (is_terminated):
-            print("TIME", t, "/ GAME", GAME, "/ STATE", state, \
-                  "/ EPSILON", agent.epsilon, "/ ACTION", action_idx, "/ REWARD", r_t, \
+            print("TIME", t, "/ GAME", GAME, "/ STATE", state,
+                  "/ EPSILON", agent.epsilon, "/ ACTION", action_idx, "/ REWARD", r_t,
                   "/ Q_MAX %e" % np.max(Q_max), "/ LIFE", max_life, "/ LOSS", loss)
 
             # Save Agent's Performance Statistics
-            if GAME % agent.stats_window_size == 0 and t > agent.observe: 
+            if GAME % agent.stats_window_size == 0 and t > agent.observe:
                 print("Update Rolling Statistics")
                 agent.mavg_score.append(np.mean(np.array(life_buffer)))
                 agent.var_score.append(np.var(np.array(life_buffer)))
@@ -351,4 +350,3 @@ if __name__ == "__main__":
                     stats_file.write('var_score: ' + str(agent.var_score) + '\n')
                     stats_file.write('mavg_ammo_left: ' + str(agent.mavg_ammo_left) + '\n')
                     stats_file.write('mavg_kill_counts: ' + str(agent.mavg_kill_counts) + '\n')
-

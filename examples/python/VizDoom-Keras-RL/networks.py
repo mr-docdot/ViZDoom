@@ -13,7 +13,7 @@ import time
 import json
 from keras.models import model_from_json
 from keras.models import Sequential, load_model, Model
-from keras.layers.core import Dense, Dropout, Activation, Flatten
+from keras.layers.core import Dense, Dropout, Activation
 from keras.layers.wrappers import TimeDistributed
 from keras.layers import Convolution2D, Dense, Flatten, merge, MaxPooling2D, Input, AveragePooling2D, Lambda, Activation, Embedding
 from keras.optimizers import SGD, Adam, rmsprop
@@ -186,7 +186,7 @@ class Networks(object):
     def dqn_novis(input_shape, action_size, learning_rate):
         # Create embedding from goal vector using 3 layer FC network
         ga_input = Input(shape=input_shape)
-        ga_flatten = Flatten(ga_input)
+        ga_flatten = Flatten()(ga_input)
         ga_fc1 = Dense(units=32, activation='relu')(ga_flatten)
         ga_fc2 = Dense(units=128, activation='relu')(ga_fc1)
         ga_embed = Dense(units=512, activation='relu')(ga_fc2)
