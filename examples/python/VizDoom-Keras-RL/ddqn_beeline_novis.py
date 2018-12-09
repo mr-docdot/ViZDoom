@@ -4,7 +4,6 @@ from __future__ import print_function
 import beeline
 import random
 import numpy as np
-import skimage
 import tensorflow as tf
 import vizdoom as vzd
 
@@ -12,23 +11,49 @@ from collections import deque
 from keras import backend as K
 from logger import Logger
 from networks import Networks
-from setup import setup_random_game
+from os import listdir
+from os.path import isfile, join
+from vizdoom import DoomGame, ScreenResolution
 
 
-def preprocess_img(img, size):
-    img = np.rollaxis(img, 0, 3)
-    img = skimage.transform.resize(img, size)
-    return img
+def get_sorted_wad_ids(wad_dir):
+    all_files = [f for f in listdir(wad_dir) if isfile(join(wad_dir, f))]
+    wad_files = [f for f in all_files if f.endswith('wad')]
+    wad_ids = [int(f.split('_')[1]) for f in wad_files]
+    wad_ids.sort()
+
+    return wad_ids
+
+
+def setup_random_game():
+    # Set up VizDoom Game
+    game = DoomGame()
+    game.load_config("./beeline.cfg")
+    game.set_sound_enabled(False)
+    game.set_screen_resolution(ScreenResolution.RES_640X480)
+    game.set_window_visible(True)
+
+    # Load generated map from WAD
+    wad_dir = '../train_sptm/data/maps/out/'
+    wad_ids = get_sorted_wad_ids(wad_dir)
+    wad_id = random.choice(wad_ids)
+    wad_path = '../train_sptm/data/maps/out/gen_{}_size_regular_mons_none_steepness_none.wad'.format(wad_id) # NOQA
+    game.set_doom_scenario_path(wad_path)
+    game.init()
+    game.new_episode()
+
+    return game
 
 
 class DoubleDQNAgent:
-    def __init__(self, vis_input_size, novis_input_size, action_size, log_dir):
-        # Get size of state and action
-        self.vis_input_size = vis_input_size
-        self.novis_input_size = novis_input_size
+
+    def __init__(self, state_size, action_size, log_dir):
+
+        # get size of state and action
+        self.state_size = state_size
         self.action_size = action_size
 
-        # Set hyper-parameters for DDQN
+        # these is hyper parameters for the Double DQN
         self.gamma = 0.99
         self.learning_rate = 0.0001
         self.epsilon = 1.0
@@ -41,16 +66,18 @@ class DoubleDQNAgent:
         self.update_target_freq = 3000
         self.timestep_per_train = 100  # Number of timesteps between training interval
 
-        # Create replay memory using deque
+        # create replay memory using deque
         self.memory = deque()
         self.max_memory = 50000  # number of previous transitions to remember
 
-        # Create main model and target model
+        # create main model and target model
         self.model = None
         self.target_model = None
 
-        # Set up performance monitoring
+        # Performance Statistics
         self.logger = Logger(log_dir)
+        self.stats_window_size = 50  # window size for computing rolling statistics
+        self.mavg_reward = []  # Moving Average of Kill Counts
 
         # Misc
         self.min_dist = -1
@@ -118,26 +145,20 @@ class DoubleDQNAgent:
         num_samples = min(self.batch_size * self.timestep_per_train, len(self.memory))
         replay_samples = random.sample(self.memory, num_samples)
 
-        update_vis_input = np.zeros(((num_samples,) + self.vis_input_size))
-        update_novis_input = np.zeros(((num_samples,) + self.novis_input_size))
-        update_vis_target = np.zeros(((num_samples,) + self.vis_input_size))
-        update_novis_target = np.zeros(((num_samples,) + self.novis_input_size))
+        update_input = np.zeros(((num_samples,) + self.state_size)) 
+        update_target = np.zeros(((num_samples,) + self.state_size))
         action, reward, done = [], [], []
 
         for i in range(num_samples):
-            update_vis_input[i, :, :] = replay_samples[i][0][0]
-            update_novis_input[i, :, :] = replay_samples[i][0][1]
-            # update_input[i, :, :] = replay_samples[i][0]
+            update_input[i, :, :] = replay_samples[i][0]
             action.append(replay_samples[i][1])
             reward.append(replay_samples[i][2])
-            update_vis_target[i, :, :] = replay_samples[i][3][0]
-            update_novis_target[i, :, :] = replay_samples[i][3][1]
-            # update_target[i, :, :] = replay_samples[i][3]
+            update_target[i, :, :] = replay_samples[i][3]
             done.append(replay_samples[i][4])
 
-        target = self.model.predict([update_vis_input, update_novis_input])
-        target_val = self.model.predict([update_vis_target, update_novis_target])
-        target_val_ = self.target_model.predict([update_vis_target, update_novis_target])
+        target = self.model.predict(update_input) 
+        target_val = self.model.predict(update_target)
+        target_val_ = self.target_model.predict(update_target)
 
         for i in range(num_samples):
             # like Q Learning, get maximum Q value at s'
@@ -151,7 +172,7 @@ class DoubleDQNAgent:
                 a = np.argmax(target_val[i])
                 target[i][action[i]] = reward[i] + self.gamma * (target_val_[i][a])
 
-        loss = self.model.fit([update_vis_input, update_novis_input], target, batch_size=self.batch_size, epochs=1, verbose=0)
+        loss = self.model.fit(update_input, target, batch_size=self.batch_size, epochs=1, verbose=0)
 
         return np.max(target[-1]), loss.history['loss']
 
@@ -179,16 +200,12 @@ if __name__ == "__main__":
 
     # Configure DQN networks
     action_size = 8
-    img_rows, img_cols = 64, 64
-    vis_input_size = (img_rows, img_cols, 16)
-    novis_input_size = (4, 3)
+    state_size = (4, 3)
 
-    log_dir = './logs/ddqn_beeline'
-    agent = DoubleDQNAgent(vis_input_size, novis_input_size, action_size, log_dir)
-    agent.model = Networks.dqn_beeline(vis_input_size, novis_input_size,
-                                       action_size, agent.learning_rate)
-    agent.target_model = Networks.dqn_beeline(vis_input_size, novis_input_size,
-                                              action_size, agent.learning_rate)
+    log_dir = './logs/ddqn_beeline_novis'
+    agent = DoubleDQNAgent(state_size, action_size, log_dir)
+    agent.model = Networks.dqn_novis(state_size, action_size, agent.learning_rate)
+    agent.target_model = Networks.dqn_novis(state_size, action_size, agent.learning_rate)
 
     # Compute initial goal
     explored_goals = {}
@@ -197,21 +214,10 @@ if __name__ == "__main__":
                                               explored_goals, True)
 
     # Compute initial state
-    rgb_t = game_state.screen_buffer  # 3x240x320
-    rgb_t = preprocess_img(rgb_t, size=(img_rows, img_cols))  # 64x64x3
-    d_t = game_state.depth_buffer  # 240x320
-    d_t = np.expand_dims(d_t, axis=0)  # 1x240x320
-    d_t = preprocess_img(d_t, size=(img_rows, img_cols))  # 64x64x1
-    rgbd_t = np.concatenate((rgb_t, d_t), axis=2)  # 64x64x4
-    rgbd_t = np.concatenate(([rgbd_t]*4), axis=2)  # 64x64x16
-    rgbd_t = np.expand_dims(rgbd_t, axis=0)  # 1x64x64x16
-
-    novis_t = np.array(game_state.game_variables)  # [cur_x, cur_y, angle]
-    novis_t[:2] = rel_goal  # [rel_goal_x, rel_goal_y, angle]
-    novis_t = np.stack(([novis_t]*4), axis=0)  # 4x3
-    novis_t = np.expand_dims(novis_t, axis=0)  # 1x4x3
-
-    s_t = [rgbd_t, novis_t]
+    x_t = np.array(game_state.game_variables)  # [cur_x, cur_y, angle]
+    x_t[:2] = rel_goal  # [rel_goal_x, rel_goal_y, angle]
+    s_t = np.stack(([x_t]*4), axis=0)  # 4x3
+    s_t = np.expand_dims(s_t, axis=0)  # 1x4x3
 
     cur_xy = np.array([misc[0], misc[1]])
     agent.min_dist = np.linalg.norm(cur_xy - cur_goal)
@@ -269,22 +275,10 @@ if __name__ == "__main__":
             cur_goal, rel_goal = beeline.compute_goal(game_state, None,
                                                       explored_goals, True)
 
-        # Compute current state
-        rgb_t1 = game_state.screen_buffer  # 3x240x320
-        rgb_t1 = preprocess_img(rgb_t1, size=(img_rows, img_cols))  # 64x64x3
-        d_t1 = game_state.depth_buffer  # 240x320
-        d_t1 = np.expand_dims(d_t1, axis=0)  # 1x240x320
-        d_t1 = preprocess_img(d_t1, size=(img_rows, img_cols))  # 64x64x1
-        rgbd_t1 = np.concatenate((rgb_t1, d_t1), axis=2)  # 64x64x4
-        rgbd_t1 = rgbd_t1.reshape(1, img_rows, img_cols, 4)  # 1x64x64x4
-        rgbd_t1 = np.append(rgbd_t1, s_t[0][:, :, :, :12], axis=3)
-
-        novis_t1 = np.array(game_state.game_variables)  # [cur_x, cur_y, angle]
-        novis_t1[:2] = rel_goal  # [rel_goal_x, rel_goal_y, angle]
-        novis_t1 = novis_t1.reshape(1, 1, 3)
-        novis_t1 = np.append(novis_t1, s_t[1][:, :3, :], axis=1)
-
-        s_t1 = [rgbd_t1, novis_t1]
+        x_t1 = np.array(game_state.game_variables)  # [x, y, angle]
+        x_t1[:2] = rel_goal  # [rel_goal_x, rel_goal_y, angle]
+        x_t1 = x_t1.reshape(1, 1, 3)
+        s_t1 = np.append(x_t1, s_t[:, :3, :], axis=1)
         misc = game_state.game_variables
 
         # Reward Shaping

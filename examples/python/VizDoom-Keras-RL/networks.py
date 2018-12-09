@@ -1,32 +1,19 @@
 #!/usr/bin/env python
 from __future__ import print_function
 
-import skimage as skimage
-from skimage import transform, color, exposure
-from skimage.viewer import ImageViewer
-import random
-from random import choice
-import numpy as np
-from collections import deque
-import time
-
-import json
-from keras.models import model_from_json
-from keras.models import Sequential, load_model, Model
-from keras.layers.core import Dense, Dropout, Activation
-from keras.layers.wrappers import TimeDistributed
-from keras.layers import Convolution2D, Dense, Flatten, merge, MaxPooling2D, Input, AveragePooling2D, Lambda, Activation, Embedding
-from keras.optimizers import SGD, Adam, rmsprop
-from keras.layers.recurrent import LSTM, GRU
-from keras.layers.normalization import BatchNormalization
 from keras import backend as K
+from keras.layers import Conv2D, Dense, Flatten, merge, MaxPooling2D, Input, AveragePooling2D, Lambda, Activation, Embedding
+from keras.layers.merge import concatenate
+from keras.layers.normalization import BatchNormalization
+from keras.layers.recurrent import LSTM
+from keras.layers.wrappers import TimeDistributed
+from keras.models import Sequential, Model
+from keras.optimizers import Adam
+# tf.python.control_flow_ops = tf
 
-import tensorflow as tf
-#tf.python.control_flow_ops = tf
 
 class Networks(object):
-
-    @staticmethod    
+    @staticmethod
     def value_distribution_network(input_shape, num_atoms, action_size, learning_rate):
         """Model Value Distribution
 
@@ -34,9 +21,9 @@ class Networks(object):
         """
 
         state_input = Input(shape=(input_shape)) 
-        cnn_feature = Convolution2D(32, 8, 8, subsample=(4,4), activation='relu')(state_input)
-        cnn_feature = Convolution2D(64, 4, 4, subsample=(2,2), activation='relu')(cnn_feature)
-        cnn_feature = Convolution2D(64, 3, 3, activation='relu')(cnn_feature)
+        cnn_feature = Conv2D(32, 8, 8, subsample=(4, 4), activation='relu')(state_input)
+        cnn_feature = Conv2D(64, 4, 4, subsample=(2, 2), activation='relu')(cnn_feature)
+        cnn_feature = Conv2D(64, 3, 3, activation='relu')(cnn_feature)
         cnn_feature = Flatten()(cnn_feature)
         cnn_feature = Dense(512, activation='relu')(cnn_feature)
 
@@ -57,13 +44,13 @@ class Networks(object):
         """
 
         model = Sequential()
-        model.add(Convolution2D(32, 8, 8, subsample=(4, 4), input_shape=(input_shape)))
+        model.add(Conv2D(32, 8, 8, subsample=(4, 4), input_shape=(input_shape)))
         model.add(BatchNormalization())
         model.add(Activation('relu'))
-        model.add(Convolution2D(64, 4, 4, subsample=(2, 2)))
+        model.add(Conv2D(64, 4, 4, subsample=(2, 2)))
         model.add(BatchNormalization())
         model.add(Activation('relu'))
-        model.add(Convolution2D(64, 3, 3))
+        model.add(Conv2D(64, 3, 3))
         model.add(BatchNormalization())
         model.add(Activation('relu'))
         model.add(Flatten())
@@ -86,13 +73,13 @@ class Networks(object):
         """
 
         model = Sequential()
-        model.add(Convolution2D(32, 8, 8, subsample=(4, 4), input_shape=(input_shape)))
+        model.add(Conv2D(32, 8, 8, subsample=(4, 4), input_shape=(input_shape)))
         model.add(BatchNormalization())
         model.add(Activation('relu'))
-        model.add(Convolution2D(64, 4, 4, subsample=(2, 2)))
+        model.add(Conv2D(64, 4, 4, subsample=(2, 2)))
         model.add(BatchNormalization())
         model.add(Activation('relu'))
-        model.add(Convolution2D(64, 3, 3))
+        model.add(Conv2D(64, 3, 3))
         model.add(BatchNormalization())
         model.add(Activation('relu'))
         model.add(Flatten())
@@ -159,13 +146,13 @@ class Networks(object):
         """
 
         model = Sequential()
-        model.add(Convolution2D(32, 8, 8, subsample=(4,4), input_shape=(input_shape)))
+        model.add(Conv2D(32, 8, 8, subsample=(4, 4), input_shape=(input_shape)))
         model.add(BatchNormalization())
         model.add(Activation('relu'))
-        model.add(Convolution2D(64, 4, 4, subsample=(2,2)))
+        model.add(Conv2D(64, 4, 4, subsample=(2, 2)))
         model.add(BatchNormalization())
         model.add(Activation('relu'))
-        model.add(Convolution2D(64, 3, 3))
+        model.add(Conv2D(64, 3, 3))
         model.add(BatchNormalization())
         model.add(Activation('relu'))
         model.add(Flatten())
@@ -202,11 +189,41 @@ class Networks(object):
         return model
 
     @staticmethod
+    def dqn_beeline(vis_input_shape, novis_input_shape, action_size, learning_rate):
+        # Create embedding from visual input
+        rgbd_input = Input(shape=vis_input_shape)
+        rgbd_conv1 = Conv2D(32, (8, 8), strides=(4, 4), activation='relu')(rgbd_input)
+        rgbd_conv2 = Conv2D(64, (4, 4), strides=(2, 2), activation='relu')(rgbd_conv1)
+        rgbd_conv3 = Conv2D(64, (3, 3), activation='relu')(rgbd_conv2)
+        rgbd_conv3flat = Flatten()(rgbd_conv3)
+        rgbd_embed = Dense(units=512, activation='relu')(rgbd_conv3flat)
+
+        # Create embedding from goal/angle tensor using 3 FC layers
+        ga_input = Input(shape=novis_input_shape)
+        ga_flatten = Flatten()(ga_input)
+        ga_fc1 = Dense(units=32, activation='relu')(ga_flatten)
+        ga_fc2 = Dense(units=128, activation='relu')(ga_fc1)
+        ga_embed = Dense(units=512, activation='relu')(ga_fc2)
+
+        # Concatenate embeddings together
+        embed_concat = concatenate([rgbd_embed, ga_embed])
+
+        # Classifier block
+        dense = Dense(units=action_size, activation="linear")(embed_concat)
+
+        # Compile model with optimizer
+        model = Model(inputs=[rgbd_input, ga_input], outputs=dense)
+        adam = Adam(lr=learning_rate)
+        model.compile(loss='mse', optimizer=adam)
+
+        return model
+
+    @staticmethod
     def dqn(input_shape, action_size, learning_rate):
         model = Sequential()
-        model.add(Convolution2D(32, 8, 8, subsample=(4,4), activation='relu', input_shape=(input_shape)))
-        model.add(Convolution2D(64, 4, 4, subsample=(2,2), activation='relu'))
-        model.add(Convolution2D(64, 3, 3, activation='relu'))
+        model.add(Conv2D(32, 8, 8, subsample=(4,4), activation='relu', input_shape=(input_shape)))
+        model.add(Conv2D(64, 4, 4, subsample=(2,2), activation='relu'))
+        model.add(Conv2D(64, 3, 3, activation='relu'))
         model.add(Flatten())
         model.add(Dense(output_dim=512, activation='relu'))
         model.add(Dense(output_dim=action_size, activation='linear'))
@@ -220,9 +237,9 @@ class Networks(object):
     def dueling_dqn(input_shape, action_size, learning_rate):
 
         state_input = Input(shape=(input_shape))
-        x = Convolution2D(32, 8, 8, subsample=(4, 4), activation='relu')(state_input)
-        x = Convolution2D(64, 4, 4, subsample=(2, 2), activation='relu')(x)
-        x = Convolution2D(64, 3, 3, activation='relu')(x)
+        x = Conv2D(32, 8, 8, subsample=(4, 4), activation='relu')(state_input)
+        x = Conv2D(64, 4, 4, subsample=(2, 2), activation='relu')(x)
+        x = Conv2D(64, 3, 3, activation='relu')(x)
         x = Flatten()(x)
 
         # state value tower - V
@@ -249,9 +266,9 @@ class Networks(object):
     def drqn(input_shape, action_size, learning_rate):
 
         model = Sequential()
-        model.add(TimeDistributed(Convolution2D(32, 8, 8, subsample=(4,4), activation='relu'), input_shape=(input_shape)))
-        model.add(TimeDistributed(Convolution2D(64, 4, 4, subsample=(2,2), activation='relu')))
-        model.add(TimeDistributed(Convolution2D(64, 3, 3, activation='relu')))
+        model.add(TimeDistributed(Conv2D(32, 8, 8, subsample=(4,4), activation='relu'), input_shape=(input_shape)))
+        model.add(TimeDistributed(Conv2D(64, 4, 4, subsample=(2,2), activation='relu')))
+        model.add(TimeDistributed(Conv2D(64, 3, 3, activation='relu')))
         model.add(TimeDistributed(Flatten()))
 
         # Use all traces for training
@@ -273,9 +290,9 @@ class Networks(object):
         """
 
         state_input = Input(shape=(input_shape)) # 4x64x64x3
-        x = TimeDistributed(Convolution2D(32, 8, 8, subsample=(4,4), activation='relu'))(state_input)
-        x = TimeDistributed(Convolution2D(64, 4, 4, subsample=(2,2), activation='relu'))(x)
-        x = TimeDistributed(Convolution2D(64, 3, 3, activation='relu'))(x)
+        x = TimeDistributed(Conv2D(32, 8, 8, subsample=(4,4), activation='relu'))(state_input)
+        x = TimeDistributed(Conv2D(64, 4, 4, subsample=(2,2), activation='relu'))(x)
+        x = TimeDistributed(Conv2D(64, 3, 3, activation='relu'))(x)
         x = TimeDistributed(Flatten())(x)
 
         x = LSTM(512, activation='tanh')(x)
