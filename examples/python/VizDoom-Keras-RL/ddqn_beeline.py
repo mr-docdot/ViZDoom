@@ -2,7 +2,6 @@
 from __future__ import print_function
 
 import beeline
-import skimage as skimage
 import random
 import numpy as np
 import tensorflow as tf
@@ -10,22 +9,11 @@ import vizdoom as vzd
 
 from collections import deque
 from keras import backend as K
-from keras.layers.core import Dense, Activation, Flatten
-from keras.layers import Convolution2D, Dense, Flatten, merge, MaxPooling2D, Input, AveragePooling2D, Lambda, Activation, Embedding
+from logger import Logger
 from networks import Networks
 from os import listdir
 from os.path import isfile, join
 from vizdoom import DoomGame, ScreenResolution
-from vizdoom import *
-
-
-def preprocessImg(img, size):
-
-    img = np.rollaxis(img, 0, 3)    # It becomes (640, 480, 3)
-    img = skimage.transform.resize(img, size)
-    img = skimage.color.rgb2gray(img)
-
-    return img
 
 
 def get_sorted_wad_ids(wad_dir):
@@ -59,7 +47,7 @@ def setup_random_game():
 
 class DoubleDQNAgent:
 
-    def __init__(self, state_size, action_size):
+    def __init__(self, state_size, action_size, log_dir):
 
         # get size of state and action
         self.state_size = state_size
@@ -80,13 +68,14 @@ class DoubleDQNAgent:
 
         # create replay memory using deque
         self.memory = deque()
-        self.max_memory = 50000 # number of previous transitions to remember
+        self.max_memory = 50000  # number of previous transitions to remember
 
         # create main model and target model
         self.model = None
         self.target_model = None
 
         # Performance Statistics
+        self.logger = Logger(log_dir)
         self.stats_window_size = 50  # window size for computing rolling statistics
         self.mavg_reward = []  # Moving Average of Kill Counts
 
@@ -213,7 +202,8 @@ if __name__ == "__main__":
     action_size = 8
     state_size = (4, 3)
 
-    agent = DoubleDQNAgent(state_size, action_size)
+    log_dir = './logs/ddqn_beeline'
+    agent = DoubleDQNAgent(state_size, action_size, log_dir)
     agent.model = Networks.dqn_novis(state_size, action_size, agent.learning_rate)
     agent.target_model = Networks.dqn_novis(state_size, action_size, agent.learning_rate)
 
@@ -241,9 +231,8 @@ if __name__ == "__main__":
     t = 0
     episode_rewards = []
     last_total_reward = -1
-
-    # Buffer to compute rolling statistics 
-    reward_buffer = []
+    num_goals_reached = 0
+    episode_length = 0
 
     while not game.is_episode_finished():
         loss = 0
@@ -256,9 +245,7 @@ if __name__ == "__main__":
 
         # Epsilon Greedy
         action_idx, a_t = agent.get_action(s_t)
-        # a_t[action_idx] = 1
 
-        # a_t = a_t.astype(int)
         game.set_action(a_t)
         skiprate = agent.frame_per_action
         game.advance_action(skiprate)
@@ -278,7 +265,6 @@ if __name__ == "__main__":
 
             # Compute average reward of last episode
             last_total_reward = np.array(episode_rewards).sum()
-            reward_buffer.append(last_total_reward)
             episode_rewards = []
 
             # Load random map
@@ -297,9 +283,12 @@ if __name__ == "__main__":
 
         # Reward Shaping
         r_t, dist, is_goal_reached, should_terminate = agent.shape_reward(r_t, misc, game,
-                                                        cur_goal, pick_new_goal,
-                                                        t)
+                                                                          cur_goal, pick_new_goal,
+                                                                          t)
         pick_new_goal = is_goal_reached
+        if is_goal_reached:
+            num_goals_reached += 1
+
         episode_rewards.append(r_t)
 
         # Update the cache
@@ -314,6 +303,7 @@ if __name__ == "__main__":
 
         s_t = s_t1
         t += 1
+        episode_length += 1 * agent.frame_per_action
 
         # Save progress every 10000 iterations
         if t % 10000 == 0:
@@ -331,19 +321,13 @@ if __name__ == "__main__":
 
         if (is_terminated):
             is_terminated = False
+
+            agent.logger.log_scalar('Episode Length', episode_length, GAME)
+            agent.logger.log_scalar('Episode Reward', last_total_reward, GAME)
+            agent.logger.log_scalar('Number of Goals Reached', num_goals_reached, GAME)
+            num_goals_reached = 0
+            episode_length = 0
+
             print("TIME", t, "/ GAME", GAME, "/ STATE", state,
                   "/ EPSILON", agent.epsilon, "/ ACTION", action_idx, "/ REWARD", last_total_reward,
                   "/ Q_MAX %e" % np.max(Q_max), "/ LOSS", loss)
-
-            # Save Agent's Performance Statistics
-            if GAME % agent.stats_window_size == 0 and t > agent.observe:
-                print("Update Rolling Statistics")
-                agent.mavg_reward.append(np.mean(np.array(reward_buffer)))
-
-                # Reset rolling stats buffer
-                reward_buffer = []
-
-                # Write Rolling Statistics to file
-                with open("statistics/ddqn_beeline_stats.txt", "w") as stats_file:
-                    stats_file.write('Game: ' + str(GAME) + '\n')
-                    stats_file.write('Average Reward: ' + str(agent.mavg_reward) + '\n')
