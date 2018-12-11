@@ -49,6 +49,9 @@ if __name__ == "__main__":
     parser.add_argument("-z", "--height_change",
                         default="none",
                         help="Amount of change in height.")
+    parser.add_argument("-o", "--out_dir",
+                        default='.',
+                        help="Output directory for generated maps.")
 
     args = parser.parse_args()
 
@@ -85,7 +88,7 @@ if __name__ == "__main__":
                            'size', args.map_dimension,
                            'mons', args.monster_quantity,
                            'steepness', args.height_change]) + '.wad'
-    output_file = './out/' + output_file
+    output_file = args.out_dir + output_file
 
     # Set generator configs, specified keys will be overwritten.
     generator.set_config(gen_params)
