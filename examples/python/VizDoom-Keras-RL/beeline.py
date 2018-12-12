@@ -2,13 +2,12 @@ import cv2
 import math
 import numpy as np
 import random
-import vizdoom as vzd
 
 
 def compute_new_goal(state, height=240, width=320,
                      map_size=256, map_scale=3, fov=90.0,
                      beacon_scale=50, only_visible_beacons=True,
-                     curr_goal=None, explored_goals={}):
+                     curr_goal=None, explored_goals={}, pick_new_goal=False):
     # Extract agent state from game
     depth_buffer = state.depth_buffer
 
@@ -100,27 +99,48 @@ def compute_new_goal(state, height=240, width=320,
                            thickness=-1)
 
     # Pick new goal from unexplored visible beacons if required
-    unexplored_beacons = []
-    for b in visble_beacons_world:
-        if b not in explored_goals:
-            unexplored_beacons.append(b)
+    if pick_new_goal:
+        unexplored_beacons = []
+        for b in visble_beacons_world:
+            if b not in explored_goals:
+                unexplored_beacons.append(b)
 
-    if len(unexplored_beacons) > 0:
-        beacon_idx = random.randint(0, len(unexplored_beacons)-1)
-        curr_goal = unexplored_beacons[beacon_idx]
-        explored_goals[curr_goal] = True
-    else:
-        curr_goal = None
+        if len(unexplored_beacons) > 0:
+            beacon_idx = random.randint(0, len(unexplored_beacons)-1)
+            curr_goal = unexplored_beacons[beacon_idx]
+            explored_goals[curr_goal] = True
+        else:
+            curr_goal = None
 
-    return curr_goal
+    # Draw current goal location on map
+    if curr_goal is not None:
+        object_relative_x = -curr_goal[0] + player_x
+        object_relative_y = -curr_goal[1] + player_y
+
+        rotated_x = math.cos(math.radians(-player_angle)) * object_relative_x - math.sin(math.radians(-player_angle)) * object_relative_y # NOQA
+        rotated_y = math.sin(math.radians(-player_angle)) * object_relative_x + math.cos(math.radians(-player_angle)) * object_relative_y # NOQA
+
+        rotated_x = int(rotated_x/map_scale + map_size)
+        rotated_y = int(rotated_y/map_scale + map_size)
+
+        if (rotated_x >= 0 and rotated_x < canvas_size and
+           rotated_y >= 0 and rotated_y < canvas_size):
+            color = (255, 255, 0)
+            object_id = 4
+            if simple_map[rotated_x, rotated_y] > 0:
+                simple_map[rotated_x, rotated_y] = object_id
+                cv2.circle(vis_map, (rotated_y, rotated_x), 2, color,
+                           thickness=-1)
+
+    return curr_goal, simple_map
 
 
 def compute_goal(state, curr_goal, explored_goals, pick_new_goal):
     # Compute absolute position of goal if required
-    if pick_new_goal:
-        curr_goal = compute_new_goal(state,
-                                     curr_goal=curr_goal,
-                                     explored_goals=explored_goals)
+    curr_goal, simple_map = compute_new_goal(state,
+                                             curr_goal=curr_goal,
+                                             explored_goals=explored_goals,
+                                             pick_new_goal=pick_new_goal)
 
     # Compute relative distance to goal
     player_x = state.game_variables[0]
@@ -138,4 +158,32 @@ def compute_goal(state, curr_goal, explored_goals, pick_new_goal):
         proj_y = player_y + math.sin(math.radians(player_angle)) * line_length * -1
         rel_goal = np.array([proj_x, proj_y])
 
-    return curr_goal, rel_goal
+    return curr_goal, rel_goal, simple_map
+
+
+def spin_beeline_agent(simple_map):
+    actions = [0, 0, 0]
+    no_beacon = np.sum(simple_map == 4) == 0
+    if no_beacon:
+        actions[1] = 1
+        return actions
+
+    center = simple_map.shape[0]/2.0
+
+    beacon_locs = np.where(simple_map == 4)
+    min_dist = 9999
+
+    for l in zip(beacon_locs[0], beacon_locs[1]):
+        xdiff = l[0] - center
+        ydiff = l[1] - center
+        d = abs(xdiff) + abs(ydiff)
+        if (d < min_dist):
+            min_dist = d
+            actions[2] = 1
+            if (abs(ydiff) > 3):
+                if (ydiff < 0):
+                    actions[0] = 1
+                else:
+                    actions[1] = 1
+
+    return actions

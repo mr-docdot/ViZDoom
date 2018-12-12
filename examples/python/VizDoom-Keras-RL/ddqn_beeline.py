@@ -61,17 +61,21 @@ class DoubleDQNAgent:
         """
         self.target_model.set_weights(self.model.get_weights())
 
-    def get_action(self, state):
+    def get_action(self, state, simple_map):
         """
         Get action from model using epsilon-greedy policy
         """
         if np.random.rand() <= self.epsilon:
-            action_idx = random.randrange(self.action_size)
+            action = beeline.spin_beeline_agent(simple_map)
+            action_idx = int(''.join(map(lambda x: str(int(x)), action)), 2)
+            # print(action)
+            # print(action_idx)
+            # action_idx = random.randrange(self.action_size)
         else:
             q = self.model.predict(state)
             action_idx = np.argmax(q)
+            action = [int(x) for x in list('{0:03b}'.format(action_idx))]
 
-        action = [int(x) for x in list('{0:03b}'.format(action_idx))]
         return action_idx, action
 
     def shape_reward(self, r_t, misc, game, cur_goal, is_new_goal, t):
@@ -193,8 +197,8 @@ if __name__ == "__main__":
     # Compute initial goal
     explored_goals = {}
     pick_new_goal = False
-    cur_goal, rel_goal = beeline.compute_goal(game_state, None,
-                                              explored_goals, True)
+    cur_goal, rel_goal, simple_map = beeline.compute_goal(game_state, None,
+                                                          explored_goals, True)
 
     # Compute initial state
     rgb_t = game_state.screen_buffer  # 3x240x320
@@ -234,11 +238,11 @@ if __name__ == "__main__":
         r_t = 0
 
         # Compute new goal using beeline policy if necessary
-        cur_goal, rel_goal = beeline.compute_goal(game_state, cur_goal,
-                                                  explored_goals, pick_new_goal)
+        cur_goal, rel_goal, simple_map = beeline.compute_goal(game_state, cur_goal,
+                                                              explored_goals, pick_new_goal)
 
         # Epsilon Greedy
-        action_idx, a_t = agent.get_action(s_t)
+        action_idx, a_t = agent.get_action(s_t, simple_map)
 
         game.set_action(a_t)
         skiprate = agent.frame_per_action
@@ -266,8 +270,8 @@ if __name__ == "__main__":
             game_state = game.get_state()
             explored_goals = {}
             pick_new_goal = False
-            cur_goal, rel_goal = beeline.compute_goal(game_state, None,
-                                                      explored_goals, True)
+            cur_goal, rel_goal, simple_map = beeline.compute_goal(game_state, None,
+                                                                  explored_goals, True)
 
         # Compute current state
         rgb_t1 = game_state.screen_buffer  # 3x240x320
